@@ -1,57 +1,113 @@
-# Sample Hardhat 3 Project (`mocha` and `ethers`)
+# 🎟️ ETH LOTTERY — Decentralized Time-Based Jackpot dApp 🚀
 
-This project showcases a Hardhat 3 project using `mocha` for tests and the `ethers` library for Ethereum interactions.
+A tactile, high-stakes, time-based lottery application built on Ethereum. Users purchase tickets for **0.01 ETH**, a live countdown runs, and when the timer hits zero, a winner is selected on-chain to receive **90% of the jackpot pool**, with **10% allocated as the protocol house fee**. 💰
 
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+---
 
-## Project Overview
+## 🌟 Overview 📝
 
-This example project includes:
+**ETH Lottery** grounds abstract blockchain interactions in a familiar physical metaphor—the paper ticket. Designed with a **Tactile High-Contrast Cyberpunk** aesthetic, the dApp features cut-out ticket stubs, perforated dividers, decorative barcode strips, and high-impact typography. 🎨
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using `mocha` and ethers.js
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+The entire lottery lifecycle is **100% decentralized and trustless**. All funds, player entries, countdown timers, and payout splits are enforced by a Solidity smart contract deployed on the Ethereum blockchain. ⚡
 
-## Usage
+---
 
-### Running Tests
+## ✨ Key Features ⚡
 
-To run all the tests in the project, execute the following command:
+- 🎟️ **Ticket Purchase:** Buy tickets for 0.01 ETH each to enter the active draw round.
+- ⏱️ **Live Countdown Timer:** Synchronized timer tracking time remaining in the current round.
+- 🏆 **Automated & On-Chain Draws:** Draws a random winner from player entries when the round expires.
+- 💰 **Fair Jackpot Distribution:** 90% of contract balance goes directly to the winner's wallet; 10% goes to the protocol owner.
+- 📜 **On-Chain Audit Log (History):** View historical draw results and winner payouts fetched directly from smart contract event logs.
+- 📖 **Interactive Rules Page:** Built-in protocol guide explaining ticket prices, draw mechanics, and transparency.
+- 🛡️ **Smart Admin Panel:** Owner controls to draw winners or restart idle rounds if timer expires without entries.
+- 🔌 **Web3 Wallet Bridge:** Connect/disconnect MetaMask or Rabby wallets with real-time account detection and status feedback.
 
-```shell
-npx hardhat test
+---
+
+## 🛠️ Technical Architecture 🏗️
+
+### 📊 Tech Stack
+
+| Layer 🧱 | Technology 💻 | Description 📄 |
+|---|---|---|
+| **Smart Contract** 📜 | Solidity `0.8.20` | Core lottery logic, ticket registry, random winner selection, payout split |
+| **Framework** ⚡ | Next.js 16 (App Router) | React 19 framework with TypeScript and Turbopack |
+| **Styling** 🎨 | Tailwind CSS v4 | Custom design tokens, clip-path ticket notches, barcode utility patterns |
+| **Web3 Integration** 🌐 | ethers.js `v6` | Provider, signer, contract instance management, event filter querying |
+| **Development Environment** 🛠️ | Hardhat | Local EVM network node, compilation, and deployment pipeline |
+
+### ⚙️ Smart Contract (`TimeBasedLottery.sol`)
+
+- 🎟️ **`buyTicket()` (`payable`):** Accepts exact ticket price (`0.01 ETH`), records buyer's address in `players` array, and emits `TicketPurchased`.
+- 🏆 **`pickWinner()` (`onlyOwner`):** Generates pseudo-random index via `keccak256(prevrandao, timestamp, players)`, calculates 90% prize and 10% fee, transfers ETH, resets state, and emits `WinnerPicked`.
+- 🔄 **`restartLottery()` (`onlyOwner`):** Allows restarting the timer when a round expires with 0 players (preventing deadlocks).
+- 📊 **`getTimeRemaining()` & `getPlayers()`:** Read-only helper functions for real-time dashboard data.
+
+---
+
+## 📁 Project Structure 🗂️
+
+```
+blockchain_lottery/
+├── app/
+│   ├── components/
+│   │   ├── Header.tsx         # 🔝 Navigation bar & wallet connect/disconnect button
+│   │   ├── MobileNav.tsx      # 📱 Mobile bottom navigation bar
+│   │   └── Toast.tsx          # 🏷️ Ticket-tag notification toast overlay
+│   ├── context/
+│   │   └── WalletContext.tsx  # 🌐 Shared Web3 provider, state & transaction context
+│   ├── history/
+│   │   └── page.tsx           # 📜 Past draws & winner audit log page
+│   ├── rules/
+│   │   └── page.tsx           # 📖 Protocol rules & transparency guide page
+│   ├── globals.css            # 🎨 Cyberpunk design system, tokens & clip-paths
+│   ├── layout.tsx             # 🧱 Root layout with Google Fonts (Anton, Hanken, JetBrains)
+│   ├── page.tsx               # 🎟️ Main Draws jackpot dashboard page
+│   └── providers.tsx          # 🔌 Client provider wrapper
+├── constants/
+│   └── contract.ts            # 🔑 Contract deployment address & complete ABI
+├── contracts/
+│   └── TimeBasedLottery.sol   # 📜 Solidity smart contract
+├── scripts/
+│   └── deploy.ts            # 🚀 Hardhat deployment script (auto-writes address + ABI)
+└── hardhat.config.ts          # ⚙️ Hardhat configuration for local network node
 ```
 
-You can also selectively run the Solidity or `mocha` tests:
+---
 
-```shell
-npx hardhat test solidity
-npx hardhat test mocha
+## 🚀 Local Development Guide 💻
+
+### 📋 Prerequisites
+- 📦 Node.js (v18+ recommended)
+- 🦊 MetaMask or Rabby browser extension
+
+### 1️⃣ Install Dependencies
+```bash
+npm install
 ```
 
-### Make a deployment to Sepolia
-
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+### 2️⃣ Run Local Hardhat Node
+```bash
+npx hardhat node
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
-
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
-
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
-
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
+### 3️⃣ Deploy Smart Contract
+In a new terminal window:
+```bash
+npx hardhat compile
+npx hardhat run scripts/deploy.ts --network localhost
 ```
+*The deploy script automatically updates `constants/contract.ts` with the new address and ABI.* 📝
 
-After setting the variable, you can run the deployment with the Sepolia network:
-
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
+### 4️⃣ Start Next.js Development Server
+```bash
+npm run dev
 ```
+Open [http://localhost:3000](http://localhost:3000) in your browser. 🌐
+
+---
+
+## 📄 License ⚖️
+
+MIT
