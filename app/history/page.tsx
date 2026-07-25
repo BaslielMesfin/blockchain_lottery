@@ -11,7 +11,7 @@ function shortAddress(addr: string): string {
 }
 
 export default function HistoryPage() {
-  const { pastWinners, recentWinner, mounted } = useWallet();
+  const { pastWinners, recentWinner, mounted, ethUsdPrice } = useWallet();
 
   if (!mounted) return null;
 
@@ -68,13 +68,16 @@ export default function HistoryPage() {
                       <span className="font-label-mono text-[10px] text-on-surface-variant/70 uppercase block">
                         PRIZE PAYOUT
                       </span>
-                      <span className="font-headline-lg text-2xl md:text-3xl text-primary-container">
+                      <span className="font-headline-lg text-2xl md:text-3xl text-primary-container block leading-tight">
                         {draw.prizeAmount} ETH
+                      </span>
+                      <span className="font-label-mono text-[10px] text-on-surface-variant/90 block font-bold">
+                        ~${(parseFloat(draw.prizeAmount) * ethUsdPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                       </span>
                     </div>
 
-                    <div className="text-right font-label-mono text-[10px] text-on-surface-variant">
-                      <span>House Fee: {draw.houseFee} ETH</span>
+                    <div className="text-right font-label-mono text-[10px] text-on-surface-variant flex flex-col gap-0.5">
+                      <span>House Fee: {draw.houseFee} ETH (~${(parseFloat(draw.houseFee) * ethUsdPrice).toFixed(2)} USD)</span>
                       <span className="block opacity-60">Block #{draw.blockNumber}</span>
                     </div>
                   </div>

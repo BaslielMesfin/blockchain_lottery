@@ -36,6 +36,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`dark ${anton.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         <link
