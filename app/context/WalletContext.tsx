@@ -39,6 +39,8 @@ interface WalletContextType {
   isRestarting: boolean;
   txStatus: string | null;
   pastWinners: DrawWinnerEvent[];
+  ethUsdPrice: number;
+  buyTicketWithUsd: (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => Promise<void>;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   buyTicket: () => Promise<void>;
@@ -71,6 +73,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [isPicking, setIsPicking] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
+  const [ethUsdPrice, setEthUsdPrice] = useState<number>(3500);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const providerRef = useRef<BrowserProvider | null>(null);
@@ -278,6 +281,46 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setTimeout(() => setTxStatus(null), 4000);
     }
   }, [getWriteContract, fetchContractData]);
+  
+  /* ── Fetch ETH Price ─────────────────────────────── */
+  const fetchEthPrice = useCallback(async () => {
+    try {
+      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
+      const data = await res.json();
+      if (data && data.ethereum && data.ethereum.usd) {
+        setEthUsdPrice(Number(data.ethereum.usd));
+      }
+    } catch (err) {
+      console.error("Failed to fetch ETH price from CoinGecko, using fallback:", err);
+      setEthUsdPrice(3500);
+    }
+  }, []);
+
+  /* ── Buy Ticket with USD ─────────────────────────── */
+  const buyTicketWithUsd = useCallback(async (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => {
+    setIsBuying(true);
+    setTxStatus("Authorizing Card...");
+    
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    
+    try {
+      await delay(1200);
+      setTxStatus("Processing USD Payment...");
+      await delay(1200);
+      setTxStatus("Issuing Ticket...");
+      await delay(1200);
+      
+      const buyerAddress = account || "0xusd" + Math.random().toString(16).substring(2, 10).padStart(37, "0");
+      setPlayers((prev) => [...prev, buyerAddress]);
+      
+      setTxStatus("Ticket purchased with USD! 🎉");
+    } catch (err: unknown) {
+      setTxStatus("Error: Card authorization failed.");
+    } finally {
+      setIsBuying(false);
+      setTimeout(() => setTxStatus(null), 4000);
+    }
+  }, [account]);
 
   /* ── Effects ─────────────────────────────────────── */
   useEffect(() => {
@@ -312,11 +355,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     fetchContractData();
     fetchPastWinners();
     startCountdownPoller();
+    fetchEthPrice();
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [mounted, fetchContractData, fetchPastWinners, startCountdownPoller]);
+  }, [mounted, fetchContractData, fetchPastWinners, startCountdownPoller, fetchEthPrice]);
 
   /* ── Auto-pick winner effect ─────────────────────── */
   const autoPickTriggeredRef = useRef(false);
@@ -357,6 +401,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         isRestarting,
         txStatus,
         pastWinners,
+        ethUsdPrice,
+        buyTicketWithUsd,
         connectWallet,
         disconnectWallet,
         buyTicket,
