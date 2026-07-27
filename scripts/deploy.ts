@@ -11,7 +11,7 @@ async function main() {
     console.log(`🚀 Deploying TimeBasedLottery to ${networkName}...`);
 
     const ticketPrice = ethers.parseEther("0.01");
-    const durationInSeconds = 300;
+    const durationInSeconds = 7200;
 
     const lottery = await ethers.deployContract("TimeBasedLottery", [
         ticketPrice,

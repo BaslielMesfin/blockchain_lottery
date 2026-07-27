@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { BrowserProvider, Contract, formatEther, parseEther } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, formatEther, parseEther } from "ethers";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/constants/contract";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -21,12 +21,15 @@ export interface DrawWinnerEvent {
   winner: string;
   prizeAmount: string;
   houseFee: string;
+  referrer?: string;
+  referrerReward?: string;
   blockNumber: number;
 }
 
 interface WalletContextType {
   mounted: boolean;
   account: string | null;
+  referrerAddress: string | null;
   isConnecting: boolean;
   timeRemaining: number;
   ticketPrice: string;
@@ -43,7 +46,7 @@ interface WalletContextType {
   buyTicketWithUsd: (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => Promise<void>;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
-  buyTicket: () => Promise<void>;
+  buyTicket: (customReferrer?: string) => Promise<void>;
   pickWinner: () => Promise<void>;
   restartLottery: () => Promise<void>;
   fetchPastWinners: () => Promise<void>;
@@ -57,6 +60,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   /* ── Wallet state ────────────────────────────────── */
   const [account, setAccount] = useState<string | null>(null);
+  const [referrerAddress, setReferrerAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
   /* ── Contract state ──────────────────────────────── */
@@ -77,11 +81,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const providerRef = useRef<BrowserProvider | null>(null);
+  const readProviderRef = useRef<JsonRpcProvider | BrowserProvider | null>(null);
   const readContractRef = useRef<Contract | null>(null);
   const lotteryEndTimeRef = useRef<number>(0);
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
+        setReferrerAddress(ref.toLowerCase());
+      }
+    }
   }, []);
 
   /* ── Provider & Contract Getters ─────────────────── */
@@ -93,14 +105,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return providerRef.current;
   }, []);
 
+  const getReadProvider = useCallback(() => {
+    if (!readProviderRef.current) {
+      readProviderRef.current = new JsonRpcProvider("http://127.0.0.1:8545");
+    }
+    return readProviderRef.current;
+  }, []);
+
   const getReadContract = useCallback(() => {
-    const provider = getProvider();
-    if (!provider) return null;
     if (!readContractRef.current) {
+      const provider = getReadProvider();
       readContractRef.current = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
     }
     return readContractRef.current;
-  }, [getProvider]);
+  }, [getReadProvider]);
 
   const getWriteContract = useCallback(async () => {
     const provider = getProvider();
@@ -115,6 +133,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!contract) return;
 
     try {
+      const provider = getReadProvider();
+      const code = await provider.getCode(CONTRACT_ADDRESS);
+      if (!code || code === "0x" || code === "0x0") {
+        console.warn("No contract deployed at CONTRACT_ADDRESS:", CONTRACT_ADDRESS);
+        return;
+      }
+
       const [price, playerList, winner, contractOwner, isOpen, endTime] =
         await Promise.all([
           contract.ticketPrice(),
@@ -135,7 +160,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("Failed to fetch contract data:", err);
     }
-  }, [getReadContract]);
+  }, [getReadContract, getReadProvider]);
 
   /* ── Fetch Past Winners Events ───────────────────── */
   const fetchPastWinners = useCallback(async () => {
@@ -143,6 +168,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!contract) return;
 
     try {
+      const provider = getReadProvider();
+      const code = await provider.getCode(CONTRACT_ADDRESS);
+      if (!code || code === "0x" || code === "0x0") return;
+
       const filter = contract.filters.WinnerPicked();
       const events = await contract.queryFilter(filter, 0, "latest");
 
@@ -153,6 +182,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           winner: args[0] as string,
           prizeAmount: formatEther(args[1]),
           houseFee: formatEther(args[2]),
+          referrer: args[3] ? (args[3] as string) : undefined,
+          referrerReward: args[4] ? formatEther(args[4]) : "0",
           blockNumber: evt.blockNumber,
         };
       }).reverse();
@@ -161,7 +192,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("Failed to fetch past winner events:", err);
     }
-  }, [getReadContract]);
+  }, [getReadContract, getReadProvider]);
 
   /* ── Countdown Poller ────────────────────────────── */
   const startCountdownPoller = useCallback(() => {
@@ -180,6 +211,43 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     timerRef.current = setInterval(tick, 1000);
   }, []);
 
+  /* ── Network Switch Helper ───────────────────────── */
+  const ensureLocalhostNetwork = useCallback(async () => {
+    if (typeof window === "undefined" || !window.ethereum) return;
+    const HARDHAT_CHAIN_ID_HEX = "0x7a69"; // 31337
+    try {
+      const currentChainId = await window.ethereum.request({ method: "eth_chainId" });
+      if (currentChainId !== HARDHAT_CHAIN_ID_HEX) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: HARDHAT_CHAIN_ID_HEX }],
+          });
+        } catch (switchError: any) {
+          if (switchError.code === 4902 || switchError.message?.includes("Unrecognized chain")) {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [
+                {
+                  chainId: HARDHAT_CHAIN_ID_HEX,
+                  chainName: "Hardhat Localhost",
+                  rpcUrls: ["http://127.0.0.1:8545"],
+                  nativeCurrency: {
+                    name: "ETH",
+                    symbol: "ETH",
+                    decimals: 18,
+                  },
+                },
+              ],
+            });
+          }
+        }
+      }
+    } catch {
+      /* silent */
+    }
+  }, []);
+
   /* ── Connect Wallet ──────────────────────────────── */
   const connectWallet = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) {
@@ -189,6 +257,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
     setIsConnecting(true);
     try {
+      await ensureLocalhostNetwork();
       const accounts = (await window.ethereum.request({
         method: "eth_requestAccounts",
       })) as string[];
@@ -204,7 +273,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, []);
+  }, [ensureLocalhostNetwork]);
 
   /* ── Disconnect Wallet ───────────────────────────── */
   const disconnectWallet = useCallback(() => {
@@ -216,14 +285,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /* ── Buy Ticket ──────────────────────────────────── */
-  const buyTicket = useCallback(async () => {
+  const buyTicket = useCallback(async (customReferrer?: string) => {
     setIsBuying(true);
     setTxStatus("Sending transaction…");
     try {
+      await ensureLocalhostNetwork();
       const contract = await getWriteContract();
       if (!contract) throw new Error("No contract");
 
-      const tx = await contract.buyTicket({ value: parseEther("0.01") });
+      const targetRef = customReferrer || referrerAddress || "0x0000000000000000000000000000000000000000";
+
+      let tx;
+      if (typeof contract.buyTicketWithReferrer === "function") {
+        tx = await contract.buyTicketWithReferrer(targetRef, { value: parseEther("0.01") });
+      } else {
+        tx = await contract.buyTicket({ value: parseEther("0.01") });
+      }
+
       setTxStatus("Mining… please wait");
       await tx.wait();
       setTxStatus("Ticket purchased! 🎉");
@@ -235,7 +313,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setIsBuying(false);
       setTimeout(() => setTxStatus(null), 4000);
     }
-  }, [getWriteContract, fetchContractData]);
+  }, [getWriteContract, fetchContractData, referrerAddress, ensureLocalhostNetwork]);
 
   /* ── Pick Winner ─────────────────────────────────── */
   const pickWinner = useCallback(async () => {
@@ -389,6 +467,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       value={{
         mounted,
         account,
+        referrerAddress,
         isConnecting,
         timeRemaining,
         ticketPrice,

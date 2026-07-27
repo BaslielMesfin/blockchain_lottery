@@ -31,6 +31,12 @@ export const CONTRACT_ABI = [
                 "internalType": "uint256",
                 "name": "amount",
                 "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "referrer",
+                "type": "address"
             }
         ],
         "name": "TicketPurchased",
@@ -56,6 +62,18 @@ export const CONTRACT_ABI = [
                 "internalType": "uint256",
                 "name": "houseFee",
                 "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "referrer",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "referrerReward",
+                "type": "uint256"
             }
         ],
         "name": "WinnerPicked",
@@ -76,7 +94,33 @@ export const CONTRACT_ABI = [
     },
     {
         "inputs": [],
+        "name": "REFERRER_FEE_PERCENT",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "buyTicket",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_referrer",
+                "type": "address"
+            }
+        ],
+        "name": "buyTicketWithReferrer",
         "outputs": [],
         "stateMutability": "payable",
         "type": "function"
@@ -188,6 +232,25 @@ export const CONTRACT_ABI = [
     {
         "inputs": [],
         "name": "recentWinner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "name": "referrers",
         "outputs": [
             {
                 "internalType": "address",

@@ -16,6 +16,7 @@ export function Header() {
     { name: "Draws", href: "/" },
     { name: "Rules", href: "/rules" },
     { name: "History", href: "/history" },
+    { name: "Terms", href: "/terms" },
   ];
 
   return (
