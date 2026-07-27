@@ -10,6 +10,7 @@ export function MobileNav() {
     { name: "Lotto", href: "/", icon: "confirmation_number" },
     { name: "Rules", href: "/rules", icon: "menu_book" },
     { name: "History", href: "/history", icon: "emoji_events" },
+    { name: "Terms", href: "/terms", icon: "description" },
   ];
 
   return (

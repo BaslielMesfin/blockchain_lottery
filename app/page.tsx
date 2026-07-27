@@ -14,16 +14,18 @@ function shortAddress(addr: string): string {
 }
 
 function formatCountdown(totalSeconds: number): string {
-  if (totalSeconds <= 0) return "00:00";
-  const m = Math.floor(totalSeconds / 60);
+  if (totalSeconds <= 0) return "00:00:00";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export default function DrawsPage() {
   const {
     mounted,
     account,
+    referrerAddress,
     timeRemaining,
     ticketPrice,
     players,
@@ -41,6 +43,7 @@ export default function DrawsPage() {
   } = useWallet();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   if (!mounted) return null;
 
@@ -61,6 +64,14 @@ export default function DrawsPage() {
         <Header />
 
         <main className="max-w-7xl mx-auto px-4 md:px-16 py-8 md:py-12 grid grid-cols-1 md:grid-cols-12 gap-8 items-start mb-20 md:mb-12">
+          {/* Referred By Badge */}
+          {referrerAddress && (
+            <div className="md:col-span-12 bg-secondary-fixed/10 border border-secondary-fixed text-secondary-fixed px-4 py-2.5 flex items-center gap-2 font-label-mono text-xs shadow-md">
+              <span className="material-symbols-outlined text-base">badge</span>
+              <span>Referred by wallet: <strong>{shortAddress(referrerAddress)}</strong> ({referrerAddress})</span>
+            </div>
+          )}
+
           {/* Left / Center Column (Main Stage - 8 cols) */}
           <div className="md:col-span-8 flex flex-col gap-8">
             {/* Jackpot Ticket Card */}
@@ -148,7 +159,7 @@ export default function DrawsPage() {
               <div className="w-full md:w-1/3 p-6 md:p-8 flex flex-col justify-center items-center bg-surface-container-high/50 gap-3">
                 {account ? (
                   <button
-                    onClick={buyTicket}
+                    onClick={() => buyTicket()}
                     disabled={isBuying || !lotteryOpen}
                     className="w-full bg-primary-container text-on-primary-fixed font-headline-lg text-lg md:text-xl py-3 px-4 hover:shadow-[4px_4px_0px_0px_#000000] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 mb-1 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                   >
@@ -182,6 +193,36 @@ export default function DrawsPage() {
                   Gas approx. 0.002 ETH (ETH option only)
                 </span>
               </div>
+            </div>
+
+            {/* Refer & Earn Card */}
+            <div className="bg-surface-indigo border border-secondary-fixed/40 p-6 md:p-8 shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 ticket-notch">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-secondary-fixed text-2xl">share</span>
+                  <h3 className="font-headline-lg text-2xl text-primary uppercase">
+                    REFER & EARN (20%)
+                  </h3>
+                </div>
+                <p className="font-body-md text-xs md:text-sm text-on-surface-variant max-w-lg">
+                  Share your personal referral link with friends. When a user who lands via your link wins a draw, you automatically receive 20% of the total jackpot!
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const link = typeof window !== "undefined"
+                    ? `${window.location.origin}/?ref=${account || "YOUR_WALLET"}`
+                    : `http://localhost:3000/?ref=${account || "YOUR_WALLET"}`;
+                  navigator.clipboard.writeText(link);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 3000);
+                }}
+                className="w-full md:w-auto bg-secondary-fixed text-on-secondary-fixed font-headline-lg text-sm md:text-base px-6 py-3 hover:shadow-[4px_4px_0px_0px_#000] active:translate-y-0.5 transition-all whitespace-nowrap uppercase font-bold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">content_copy</span>
+                {copied ? "COPIED LINK!" : "COPY REFERRAL LINK"}
+              </button>
             </div>
           </div>
 
