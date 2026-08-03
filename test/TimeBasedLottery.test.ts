@@ -127,4 +127,54 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
       expect(rolloverBal).to.equal(expectedRollover);
     });
   });
+
+  describe("Multi-Pool Config Validation (Flash Pool: 60s / 0.001 ETH)", function () {
+    async function deployFlashFixture() {
+      const { ethers } = await network.create();
+      const [owner, player1, player2] = await ethers.getSigners();
+
+      const ticketPrice = ethers.parseEther("0.001"); // Flash pool price
+      const duration = 60; // 1 minute
+
+      const TimeBasedLottery = await ethers.getContractFactory("TimeBasedLottery");
+      const lottery = await TimeBasedLottery.deploy(ticketPrice, duration);
+
+      return { lottery, ticketPrice, duration, owner, player1, player2, ethers };
+    }
+
+    it("Should initialize with 60 second duration and 0.001 ETH ticket price", async function () {
+      const { lottery, duration, ticketPrice } = await deployFlashFixture();
+      expect(await lottery.duration()).to.equal(BigInt(duration));
+      expect(await lottery.ticketPrice()).to.equal(ticketPrice);
+    });
+
+    it("Should complete a full draw cycle with Flash pool config", async function () {
+      const { lottery, ticketPrice, owner, player1, player2, ethers } = await deployFlashFixture();
+
+      // Player 1 buys ticket
+      await lottery.connect(player1).buyTicket({ value: ticketPrice });
+      expect((await lottery.getPlayers()).length).to.equal(1);
+
+      // Fast forward 61 seconds
+      await ethers.provider.send("evm_increaseTime", [61]);
+      await ethers.provider.send("evm_mine", []);
+
+      const totalPool = ticketPrice;
+      const expectedHouseFee = (totalPool * 10n) / 100n;
+      const expectedWinnerPrize = (totalPool * 70n) / 100n;
+
+      const ownerBalBefore = await ethers.provider.getBalance(owner.address);
+      const player1BalBefore = await ethers.provider.getBalance(player1.address);
+
+      const tx = await lottery.connect(player2).pickWinner();
+      await tx.wait();
+
+      const ownerBalAfter = await ethers.provider.getBalance(owner.address);
+      const player1BalAfter = await ethers.provider.getBalance(player1.address);
+
+      expect(ownerBalAfter - ownerBalBefore).to.equal(expectedHouseFee);
+      expect(player1BalAfter - player1BalBefore).to.equal(expectedWinnerPrize);
+      expect(await lottery.recentWinner()).to.equal(player1.address);
+    });
+  });
 });

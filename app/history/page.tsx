@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Header } from "@/app/components/Header";
 import { MobileNav } from "@/app/components/MobileNav";
 import { Toast } from "@/app/components/Toast";
@@ -11,12 +12,20 @@ function shortAddress(addr: string): string {
 }
 
 export default function HistoryPage() {
-  const { pastWinners, recentWinner, mounted, ethUsdPrice } = useWallet();
+  const { mounted, ethUsdPrice, pools, poolStates } = useWallet();
+  const [selectedPoolId, setSelectedPoolId] = useState<string>("all");
 
   if (!mounted) return null;
 
-  const isZeroWinner =
-    !recentWinner || recentWinner === "0x0000000000000000000000000000000000000000";
+  // Aggregate winners across pools or filter by selected pool
+  const displayWinners = selectedPoolId === "all"
+    ? pools.flatMap((pool) =>
+        (poolStates[pool.id]?.pastWinners || []).map((w) => ({ ...w, poolIcon: pool.icon, poolName: pool.name }))
+      ).sort((a, b) => b.blockNumber - a.blockNumber)
+    : (poolStates[selectedPoolId]?.pastWinners || []).map((w) => {
+        const pool = pools.find((p) => p.id === selectedPoolId)!;
+        return { ...w, poolIcon: pool.icon, poolName: pool.name };
+      });
 
   return (
     <div className="min-h-screen flex flex-col justify-between relative overflow-x-hidden">
@@ -37,23 +46,55 @@ export default function HistoryPage() {
             </p>
           </div>
 
+          {/* Pool Filter Tabs */}
+          <div className="flex flex-wrap gap-2 mb-8">
+            <button
+              onClick={() => setSelectedPoolId("all")}
+              className={`px-4 py-2 font-label-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border ${
+                selectedPoolId === "all"
+                  ? "bg-primary-container text-on-primary-fixed border-primary-container"
+                  : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/40 hover:border-primary-container"
+              }`}
+            >
+              ALL POOLS
+            </button>
+            {pools.map((pool) => (
+              <button
+                key={pool.id}
+                onClick={() => setSelectedPoolId(pool.id)}
+                className={`px-4 py-2 font-label-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border ${
+                  selectedPoolId === pool.id
+                    ? "bg-primary-container text-on-primary-fixed border-primary-container"
+                    : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/40 hover:border-primary-container"
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs align-middle" style={{ fontVariationSettings: "'FILL' 1" }}>{pool.icon}</span> {pool.name}
+              </button>
+            ))}
+          </div>
+
           {/* Past Winners List */}
-          {pastWinners.length > 0 ? (
+          {displayWinners.length > 0 ? (
             <div className="flex flex-col gap-6">
-              {pastWinners.map((draw, idx) => (
+              {displayWinners.map((draw, idx) => (
                 <div
                   key={`${draw.blockNumber}-${idx}`}
                   className="bg-surface-indigo border border-outline-variant ticket-notch p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-xl relative"
                 >
                   <div className="flex items-center gap-4">
                     <div className="bg-secondary-fixed text-on-secondary-fixed w-12 h-12 flex items-center justify-center font-headline-lg text-xl font-bold">
-                      #{pastWinners.length - idx}
+                      #{displayWinners.length - idx}
                     </div>
 
                     <div>
-                      <span className="font-label-mono text-[10px] text-on-surface-variant/70 uppercase block">
-                        WINNER ADDRESS
-                      </span>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-label-mono text-[10px] text-on-surface-variant/70 uppercase">
+                          WINNER ADDRESS
+                        </span>
+                        <span className="font-label-mono text-[10px] bg-primary-container/20 text-primary-container px-2 py-0.5 font-bold">
+                          <span className="material-symbols-outlined text-[10px] align-middle" style={{ fontVariationSettings: "'FILL' 1" }}>{draw.poolIcon}</span> {draw.poolName}
+                        </span>
+                      </div>
                       <span className="font-ticket-id text-base md:text-lg text-primary font-bold">
                         {shortAddress(draw.winner)}
                       </span>
@@ -88,21 +129,6 @@ export default function HistoryPage() {
                   </div>
                 </div>
               ))}
-            </div>
-          ) : !isZeroWinner ? (
-            <div className="bg-surface-indigo border border-outline-variant ticket-notch p-8 flex flex-col items-center justify-center text-center shadow-xl">
-              <span className="material-symbols-outlined text-secondary-fixed text-5xl mb-3">
-                emoji_events
-              </span>
-              <h3 className="font-headline-lg text-2xl text-primary uppercase mb-2">
-                MOST RECENT WINNER
-              </h3>
-              <div className="font-ticket-id text-sm md:text-base bg-surface-container-lowest py-3 px-6 border border-outline-variant/50 text-secondary-fixed font-bold mb-2">
-                {recentWinner}
-              </div>
-              <p className="font-label-mono text-xs text-on-surface-variant">
-                Live draw history events will populate here as rounds complete.
-              </p>
             </div>
           ) : (
             <div className="bg-surface-indigo border border-outline-variant ticket-notch p-12 flex flex-col items-center justify-center text-center shadow-xl">

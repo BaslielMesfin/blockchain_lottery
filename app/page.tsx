@@ -6,7 +6,6 @@ import { MobileNav } from "@/app/components/MobileNav";
 import { Toast } from "@/app/components/Toast";
 import { UsdPaymentModal } from "@/app/components/UsdPaymentModal";
 import { useWallet } from "@/app/context/WalletContext";
-import { CONTRACT_ADDRESS } from "@/constants/contract";
 
 function shortAddress(addr: string): string {
   if (!addr) return "N/A";
@@ -15,10 +14,28 @@ function shortAddress(addr: string): string {
 
 function formatCountdown(totalSeconds: number): string {
   if (totalSeconds <= 0) return "00:00:00";
-  const h = Math.floor(totalSeconds / 3600);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
+
+  if (d > 0) {
+    return `${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+  }
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/** Short timer for tab badges */
+function formatTabTimer(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "ENDED";
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export default function DrawsPage() {
@@ -26,20 +43,19 @@ export default function DrawsPage() {
     mounted,
     account,
     referrerAddress,
-    timeRemaining,
-    ticketPrice,
-    players,
-    recentWinner,
     owner,
-    lotteryOpen,
     isBuying,
     isPicking,
-    isRestarting,
     buyTicket,
     pickWinner,
-    restartLottery,
     connectWallet,
     ethUsdPrice,
+    activePoolId,
+    setActivePoolId,
+    pools,
+    poolStates,
+    activePool,
+    activePoolConfig,
   } = useWallet();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,17 +66,16 @@ export default function DrawsPage() {
 
   const isOwner = account !== null && owner !== "" && account === owner;
   const totalPool =
-    players.length > 0 && ticketPrice !== "0"
-      ? (parseFloat(ticketPrice) * players.length).toFixed(2)
-      : "0.00";
-  const winnerPrize = (parseFloat(totalPool) * 0.70).toFixed(2);
+    activePool.players.length > 0 && activePool.ticketPrice !== "0"
+      ? (parseFloat(activePool.ticketPrice) * activePool.players.length).toFixed(4)
+      : "0.0000";
+  const winnerPrize = (parseFloat(totalPool) * 0.70).toFixed(4);
 
   const isZeroWinner =
-    !recentWinner || recentWinner === "0x0000000000000000000000000000000000000000";
+    !activePool.recentWinner || activePool.recentWinner === "0x0000000000000000000000000000000000000000";
 
   const winnerPrizeUsd = parseFloat(winnerPrize) * ethUsdPrice;
-  const totalPoolUsd = parseFloat(totalPool) * ethUsdPrice;
-  const ticketPriceUsd = parseFloat(ticketPrice) * ethUsdPrice;
+  const ticketPriceUsd = parseFloat(activePool.ticketPrice) * ethUsdPrice;
 
   return (
     <div className="min-h-screen flex flex-col justify-between relative overflow-x-hidden">
@@ -68,6 +83,47 @@ export default function DrawsPage() {
         <Header />
 
         <main className="max-w-7xl mx-auto px-4 md:px-16 py-8 md:py-12 grid grid-cols-1 md:grid-cols-12 gap-8 items-start mb-20 md:mb-12">
+
+          {/* ───── Pool Tab Switcher ───── */}
+          <div className="md:col-span-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+              {pools.map((pool) => {
+                const isActive = pool.id === activePoolId;
+                const poolState = poolStates[pool.id];
+                const timer = poolState?.timeRemaining ?? 0;
+
+                return (
+                  <button
+                    key={pool.id}
+                    onClick={() => {
+                      setActivePoolId(pool.id);
+                      setTicketCount(1);
+                    }}
+                    className={`relative flex flex-col items-center gap-1 px-3 py-3 md:py-4 font-label-mono text-xs md:text-sm font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer border ${
+                      isActive
+                        ? "bg-primary-container text-on-primary-fixed border-primary-container shadow-[4px_4px_0px_0px_#000000]"
+                        : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/40 hover:border-primary-container hover:bg-surface-container-high/50"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base md:text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>{pool.icon}</span>
+                    <span className="leading-tight">{pool.name}</span>
+                    <span className={`text-[10px] font-mono ${
+                      isActive ? "text-on-primary-fixed/80" : "text-on-surface-variant/60"
+                    }`}>
+                      {formatTabTimer(timer)}
+                    </span>
+                    {/* Active dot indicator */}
+                    {timer > 0 && (
+                      <span className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full ${
+                        isActive ? "bg-success-green" : "bg-success-green/50"
+                      }`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Referred By Badge */}
           {referrerAddress && (
             <div className="md:col-span-12 bg-secondary-fixed/10 border border-secondary-fixed text-secondary-fixed px-4 py-2.5 flex items-center gap-2 font-label-mono text-xs shadow-md">
@@ -104,7 +160,7 @@ export default function DrawsPage() {
                       ${ticketPriceUsd.toFixed(2)} USD
                     </span>
                     <span className="font-label-mono text-[10px] text-void-black/60 block mt-0.5">
-                      ({ticketPrice} ETH)
+                      ({activePool.ticketPrice} ETH)
                     </span>
                   </div>
                   <div className="bg-void-black/5 px-4 py-2 border border-void-black/10">
@@ -112,7 +168,7 @@ export default function DrawsPage() {
                       Tickets Sold
                     </span>
                     <span className="font-ticket-id text-sm md:text-base font-bold text-void-black block">
-                      {players.length}
+                      {activePool.players.length}
                     </span>
                   </div>
                 </div>
@@ -124,8 +180,8 @@ export default function DrawsPage() {
               <div className="h-20 md:h-24 bg-primary-container/20 p-4 flex justify-between items-center relative z-10">
                 <div className="w-2/3 md:w-3/4 h-10 md:h-12 barcode opacity-60" />
                 <div className="font-label-mono text-xs text-void-black text-right">
-                  <span className="block text-[10px] opacity-60">CONTRACT</span>
-                  <span className="font-bold">{shortAddress(CONTRACT_ADDRESS)}</span>
+                  <span className="block text-[10px] opacity-60">POOL</span>
+                  <span className="font-bold flex items-center gap-1"><span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>{activePoolConfig.icon}</span> {activePoolConfig.name}</span>
                 </div>
               </div>
             </div>
@@ -134,7 +190,7 @@ export default function DrawsPage() {
             <div className="bg-surface-indigo text-primary border border-outline-variant ticket-notch w-full shadow-xl flex flex-col md:flex-row relative">
               <div className="flex-1 p-6 md:p-8 relative flex flex-col justify-center items-center md:items-start text-center md:text-left">
                 {/* Stamp Badge */}
-                {lotteryOpen ? (
+                {activePool.lotteryOpen ? (
                   <div className="absolute top-4 right-4 md:top-6 md:right-6 border-4 border-success-green text-success-green font-headline-lg text-xl md:text-2xl px-3 py-1 rotate-6 opacity-90 shadow-md">
                     LIVE
                   </div>
@@ -148,7 +204,7 @@ export default function DrawsPage() {
                   Time Remaining
                 </span>
                 <div className="font-display-jackpot text-6xl md:text-[76px] leading-none mb-4 tracking-tighter text-primary">
-                  {formatCountdown(timeRemaining)}
+                  {formatCountdown(activePool.timeRemaining)}
                 </div>
                 <p className="font-body-md text-sm md:text-base text-on-surface-variant max-w-sm">
                   Purchase a ticket to enter the current round. When the timer reaches zero, a winner is picked automatically.
@@ -212,7 +268,7 @@ export default function DrawsPage() {
                 {account ? (
                   <button
                     onClick={() => buyTicket(undefined, ticketCount)}
-                    disabled={isBuying || !lotteryOpen}
+                    disabled={isBuying || !activePool.lotteryOpen}
                     className="w-full bg-primary-container text-on-primary-fixed font-headline-lg text-lg md:text-xl py-3 px-4 hover:shadow-[4px_4px_0px_0px_#000000] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 mb-1 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                   >
                     {isBuying ? (
@@ -221,7 +277,7 @@ export default function DrawsPage() {
                         BUYING…
                       </>
                     ) : (
-                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} (${(0.01 * ticketCount).toFixed(2)} ETH)`
+                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} (${(parseFloat(activePool.ticketPrice) * ticketCount).toFixed(4)} ETH)`
                     )}
                   </button>
                 ) : (
@@ -235,10 +291,10 @@ export default function DrawsPage() {
 
                 <button
                   onClick={() => setIsModalOpen(true)}
-                  disabled={isBuying || !lotteryOpen}
+                  disabled={isBuying || !activePool.lotteryOpen}
                   className="w-full bg-transparent hover:bg-secondary-fixed/10 text-secondary-fixed border-2 border-secondary-fixed/50 font-headline-lg text-lg md:text-xl py-2.5 px-4 hover:shadow-[4px_4px_0px_0px_rgba(0,251,251,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                 >
-                  PAY WITH USD / CARD (${((0.01 * ticketCount) * ethUsdPrice).toFixed(2)})
+                  PAY WITH USD / CARD (${((parseFloat(activePool.ticketPrice) * ticketCount) * ethUsdPrice).toFixed(2)})
                 </button>
 
                 <span className="font-label-mono text-[10px] text-on-surface-variant opacity-70 text-center mt-1">
@@ -284,7 +340,7 @@ export default function DrawsPage() {
             <div className="bg-surface-indigo border border-outline-variant text-primary shadow-xl flex flex-col h-full relative ticket-notch-top-bottom overflow-hidden">
               {/* Top Header */}
               <div className="bg-secondary-fixed text-on-secondary-fixed p-3 md:p-4 text-center font-label-mono text-xs md:text-sm font-bold tracking-widest uppercase">
-                LAST DRAW
+                LAST DRAW — <span className="material-symbols-outlined text-xs align-middle" style={{ fontVariationSettings: "'FILL' 1" }}>{activePoolConfig.icon}</span> {activePoolConfig.name}
               </div>
 
               {/* Main Content */}
@@ -306,7 +362,7 @@ export default function DrawsPage() {
                 ) : (
                   <>
                     <div className="font-ticket-id text-xs md:text-sm bg-surface-container-lowest py-2.5 px-4 border border-outline-variant/50 break-all w-full mb-3 text-secondary-fixed font-bold">
-                      {shortAddress(recentWinner)}
+                      {shortAddress(activePool.recentWinner)}
                     </div>
                     <span className="font-label-mono text-xs md:text-sm text-on-surface-variant font-medium">
                       Verified On-Chain
@@ -338,14 +394,14 @@ export default function DrawsPage() {
                 Zero admin control or owner privileges. The smart contract automatically executes 70/20/10 payouts on-chain.
               </p>
 
-              {timeRemaining === 0 && players.length > 0 ? (
+              {activePool.timeRemaining === 0 && activePool.players.length > 0 ? (
                 <button
                   onClick={pickWinner}
                   disabled={isPicking}
                   className="bg-success-green text-void-black border border-success-green px-4 py-2.5 font-label-mono text-xs font-bold hover:shadow-[3px_3px_0px_0px_#000] active:translate-y-0.5 transition-all w-full text-center uppercase flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-base">emoji_events</span>
-                  <span>{isPicking ? "DRAWING WINNER…" : `TRIGGER WINNER DRAW (${players.length} TICKET${players.length > 1 ? "S" : ""})`}</span>
+                  <span>{isPicking ? "DRAWING WINNER…" : `TRIGGER WINNER DRAW (${activePool.players.length} TICKET${activePool.players.length > 1 ? "S" : ""})`}</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2 font-label-mono text-[10px] text-secondary-fixed bg-secondary-fixed/10 px-3 py-2 border border-secondary-fixed/30 font-bold">

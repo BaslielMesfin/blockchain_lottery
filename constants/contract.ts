@@ -1,4 +1,49 @@
-export const CONTRACT_ADDRESS = "0x0165878A594ca255338adfa4d48449f69242Eb8F";
+export interface PoolConfig {
+    id: string;
+    name: string;
+    icon: string;
+    address: string;
+    duration: number;
+    ticketPriceEth: string;
+}
+
+export const POOLS: PoolConfig[] = [
+    {
+        "id": "flash",
+        "name": "1-MIN FLASH",
+        "icon": "bolt",
+        "address": "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e",
+        "duration": 60,
+        "ticketPriceEth": "0.01"
+    },
+    {
+        "id": "express",
+        "name": "1-HOUR EXPRESS",
+        "icon": "avg_pace",
+        "address": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
+        "duration": 3600,
+        "ticketPriceEth": "0.01"
+    },
+    {
+        "id": "standard",
+        "name": "6-HOUR STANDARD",
+        "icon": "local_fire_department",
+        "address": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+        "duration": 21600,
+        "ticketPriceEth": "0.01"
+    },
+    {
+        "id": "mega",
+        "name": "1-WEEK MEGA",
+        "icon": "diamond",
+        "address": "0x9A676e781A523b5d0C0e43731313A708CB607508",
+        "duration": 604800,
+        "ticketPriceEth": "0.01"
+    }
+];
+
+/** Backward-compatible: default to the Standard pool */
+export const CONTRACT_ADDRESS = POOLS[2].address;
 
 export const CONTRACT_ABI = [
     {

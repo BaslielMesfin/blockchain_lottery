@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { BrowserProvider, Contract, JsonRpcProvider, formatEther, parseEther } from "ethers";
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/constants/contract";
+import { POOLS, CONTRACT_ABI, type PoolConfig } from "@/constants/contract";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface EthereumProvider {
@@ -24,6 +24,15 @@ export interface DrawWinnerEvent {
   referrer?: string;
   referrerReward?: string;
   blockNumber: number;
+}
+
+export interface PoolState {
+  timeRemaining: number;
+  ticketPrice: string;
+  players: string[];
+  recentWinner: string;
+  lotteryOpen: boolean;
+  pastWinners: DrawWinnerEvent[];
 }
 
 /* ── Human-Friendly Error Parser ────────────────────── */
@@ -56,23 +65,38 @@ function formatUserFriendlyError(err: unknown): string {
   return "Error: Transaction could not be completed. Please try again.";
 }
 
+function createEmptyPoolState(pool: PoolConfig): PoolState {
+  return {
+    timeRemaining: 0,
+    ticketPrice: pool.ticketPriceEth,
+    players: [],
+    recentWinner: "",
+    lotteryOpen: true,
+    pastWinners: [],
+  };
+}
+
 interface WalletContextType {
   mounted: boolean;
   account: string | null;
   referrerAddress: string | null;
   isConnecting: boolean;
-  timeRemaining: number;
-  ticketPrice: string;
-  players: string[];
-  recentWinner: string;
   owner: string;
-  lotteryOpen: boolean;
   isBuying: boolean;
   isPicking: boolean;
   isRestarting: boolean;
   txStatus: string | null;
-  pastWinners: DrawWinnerEvent[];
   ethUsdPrice: number;
+
+  /* Multi-pool */
+  activePoolId: string;
+  setActivePoolId: (id: string) => void;
+  pools: PoolConfig[];
+  poolStates: Record<string, PoolState>;
+  activePool: PoolState;
+  activePoolConfig: PoolConfig;
+
+  /* Actions (operate on active pool) */
   buyTicketWithUsd: (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => Promise<void>;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
@@ -85,6 +109,8 @@ interface WalletContextType {
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
+const DEFAULT_POOL_ID = "standard"; // Default to 6-hour Standard pool
+
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
@@ -93,14 +119,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [referrerAddress, setReferrerAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  /* ── Contract state ──────────────────────────────── */
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
-  const [ticketPrice, setTicketPrice] = useState<string>("0.01");
-  const [players, setPlayers] = useState<string[]>([]);
-  const [recentWinner, setRecentWinner] = useState<string>("");
+  /* ── Shared contract state ──────────────────────── */
   const [owner, setOwner] = useState<string>("");
-  const [lotteryOpen, setLotteryOpen] = useState<boolean>(true);
-  const [pastWinners, setPastWinners] = useState<DrawWinnerEvent[]>([]);
+
+  /* ── Multi-pool state ──────────────────────────── */
+  const [activePoolId, setActivePoolId] = useState<string>(DEFAULT_POOL_ID);
+  const [poolStates, setPoolStates] = useState<Record<string, PoolState>>(() => {
+    const initial: Record<string, PoolState> = {};
+    for (const pool of POOLS) {
+      initial[pool.id] = createEmptyPoolState(pool);
+    }
+    return initial;
+  });
 
   /* ── TX state ────────────────────────────────────── */
   const [isBuying, setIsBuying] = useState(false);
@@ -112,8 +142,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const providerRef = useRef<BrowserProvider | null>(null);
   const readProviderRef = useRef<JsonRpcProvider | BrowserProvider | null>(null);
-  const readContractRef = useRef<Contract | null>(null);
-  const lotteryEndTimeRef = useRef<number>(0);
+
+  /* Per-pool refs */
+  const readContractsRef = useRef<Map<string, Contract>>(new Map());
+  const lotteryEndTimesRef = useRef<Map<string, number>>(new Map());
+
+  /* Derived state */
+  const activePoolConfig = POOLS.find((p) => p.id === activePoolId) || POOLS[2];
+  const activePool = poolStates[activePoolId] || createEmptyPoolState(activePoolConfig);
 
   useEffect(() => {
     setMounted(true);
@@ -142,99 +178,128 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return readProviderRef.current;
   }, []);
 
-  const getReadContract = useCallback(() => {
-    if (!readContractRef.current) {
-      const provider = getReadProvider();
-      readContractRef.current = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-    }
-    return readContractRef.current;
+  const getReadContract = useCallback((poolId: string) => {
+    const existing = readContractsRef.current.get(poolId);
+    if (existing) return existing;
+
+    const pool = POOLS.find((p) => p.id === poolId);
+    if (!pool) return null;
+
+    const provider = getReadProvider();
+    const contract = new Contract(pool.address, CONTRACT_ABI, provider);
+    readContractsRef.current.set(poolId, contract);
+    return contract;
   }, [getReadProvider]);
 
-  const getWriteContract = useCallback(async () => {
+  const getWriteContract = useCallback(async (poolId?: string) => {
     const provider = getProvider();
     if (!provider) return null;
+    const targetPool = POOLS.find((p) => p.id === (poolId || activePoolId));
+    if (!targetPool) return null;
     const signer = await provider.getSigner();
-    return new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  }, [getProvider]);
+    return new Contract(targetPool.address, CONTRACT_ABI, signer);
+  }, [getProvider, activePoolId]);
 
-  /* ── Fetch Contract Data ─────────────────────────── */
+  /* ── Fetch Contract Data (all pools) ────────────── */
   const fetchContractData = useCallback(async () => {
-    const contract = getReadContract();
-    if (!contract) return;
+    const provider = getReadProvider();
 
-    try {
-      const provider = getReadProvider();
-      const code = await provider.getCode(CONTRACT_ADDRESS);
-      if (!code || code === "0x" || code === "0x0") {
-        console.warn("No contract deployed at CONTRACT_ADDRESS:", CONTRACT_ADDRESS);
-        return;
+    for (const pool of POOLS) {
+      const contract = getReadContract(pool.id);
+      if (!contract) continue;
+
+      try {
+        const code = await provider.getCode(pool.address);
+        if (!code || code === "0x" || code === "0x0") continue;
+
+        const [price, playerList, winner, contractOwner, isOpen, endTime] =
+          await Promise.all([
+            contract.ticketPrice(),
+            contract.getPlayers(),
+            contract.recentWinner(),
+            contract.owner(),
+            contract.lotteryOpen(),
+            contract.lotteryEndTime(),
+          ]);
+
+        // Set owner from any pool (they all share the same deployer)
+        setOwner((contractOwner as string).toLowerCase());
+
+        lotteryEndTimesRef.current.set(pool.id, Number(endTime));
+
+        setPoolStates((prev) => ({
+          ...prev,
+          [pool.id]: {
+            ...prev[pool.id],
+            ticketPrice: formatEther(price),
+            players: playerList as string[],
+            recentWinner: winner as string,
+            lotteryOpen: isOpen as boolean,
+          },
+        }));
+      } catch (err) {
+        console.error(`Failed to fetch data for pool ${pool.id}:`, err);
       }
-
-      const [price, playerList, winner, contractOwner, isOpen, endTime] =
-        await Promise.all([
-          contract.ticketPrice(),
-          contract.getPlayers(),
-          contract.recentWinner(),
-          contract.owner(),
-          contract.lotteryOpen(),
-          contract.lotteryEndTime(),
-        ]);
-
-      setTicketPrice(formatEther(price));
-      setPlayers(playerList as string[]);
-      setRecentWinner(winner as string);
-      setOwner((contractOwner as string).toLowerCase());
-      setLotteryOpen(isOpen as boolean);
-
-      lotteryEndTimeRef.current = Number(endTime);
-    } catch (err) {
-      console.error("Failed to fetch contract data:", err);
     }
   }, [getReadContract, getReadProvider]);
 
-  /* ── Fetch Past Winners Events ───────────────────── */
+  /* ── Fetch Past Winners Events (active pool) ────── */
   const fetchPastWinners = useCallback(async () => {
-    const contract = getReadContract();
-    if (!contract) return;
+    for (const pool of POOLS) {
+      const contract = getReadContract(pool.id);
+      if (!contract) continue;
 
-    try {
-      const provider = getReadProvider();
-      const code = await provider.getCode(CONTRACT_ADDRESS);
-      if (!code || code === "0x" || code === "0x0") return;
+      try {
+        const provider = getReadProvider();
+        const code = await provider.getCode(pool.address);
+        if (!code || code === "0x" || code === "0x0") continue;
 
-      const filter = contract.filters.WinnerPicked();
-      const events = await contract.queryFilter(filter, 0, "latest");
+        const filter = contract.filters.WinnerPicked();
+        const events = await contract.queryFilter(filter, 0, "latest");
 
-      const formatted: DrawWinnerEvent[] = events.map((evt) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const args = (evt as any).args;
-        return {
-          winner: args[0] as string,
-          prizeAmount: formatEther(args[1]),
-          houseFee: formatEther(args[2]),
-          referrer: args[3] ? (args[3] as string) : undefined,
-          referrerReward: args[4] ? formatEther(args[4]) : "0",
-          blockNumber: evt.blockNumber,
-        };
-      }).reverse();
+        const formatted: DrawWinnerEvent[] = events.map((evt) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const args = (evt as any).args;
+          return {
+            winner: args[0] as string,
+            prizeAmount: formatEther(args[1]),
+            houseFee: formatEther(args[2]),
+            referrer: args[3] ? (args[3] as string) : undefined,
+            referrerReward: args[4] ? formatEther(args[4]) : "0",
+            blockNumber: evt.blockNumber,
+          };
+        }).reverse();
 
-      setPastWinners(formatted);
-    } catch (err) {
-      console.error("Failed to fetch past winner events:", err);
+        setPoolStates((prev) => ({
+          ...prev,
+          [pool.id]: {
+            ...prev[pool.id],
+            pastWinners: formatted,
+          },
+        }));
+      } catch (err) {
+        console.error(`Failed to fetch past winners for pool ${pool.id}:`, err);
+      }
     }
   }, [getReadContract, getReadProvider]);
 
-  /* ── Countdown Poller ────────────────────────────── */
+  /* ── Countdown Poller (all pools) ───────────────── */
   const startCountdownPoller = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     const tick = () => {
-      const endTime = lotteryEndTimeRef.current;
-      if (endTime === 0) return;
-
       const nowSeconds = Math.floor(Date.now() / 1000);
-      const remaining = Math.max(0, endTime - nowSeconds);
-      setTimeRemaining(remaining);
+
+      setPoolStates((prev) => {
+        const next = { ...prev };
+        for (const pool of POOLS) {
+          const endTime = lotteryEndTimesRef.current.get(pool.id) || 0;
+          if (endTime === 0) continue;
+          const remaining = Math.max(0, endTime - nowSeconds);
+          next[pool.id] = { ...next[pool.id], timeRemaining: remaining };
+        }
+        return next;
+      });
     };
 
     tick();
@@ -278,8 +343,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-
-
   /* ── Connect Wallet ──────────────────────────────── */
   const connectWallet = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) {
@@ -310,12 +373,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const disconnectWallet = useCallback(() => {
     setAccount(null);
     providerRef.current = null;
-    readContractRef.current = null;
+    readContractsRef.current.clear();
     setTxStatus("Wallet disconnected.");
     setTimeout(() => setTxStatus(null), 3000);
   }, []);
 
-  /* ── Buy Ticket ──────────────────────────────────── */
+  /* ── Buy Ticket (active pool) ───────────────────── */
   const buyTicket = useCallback(async (customReferrer?: string, count: number = 1) => {
     setIsBuying(true);
     setTxStatus("Sending transaction…");
@@ -325,7 +388,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (!contract) throw new Error("No contract");
 
       const targetRef = customReferrer || referrerAddress || "0x0000000000000000000000000000000000000000";
-      const totalEther = (0.01 * count).toFixed(4);
+      const price = parseFloat(activePoolConfig.ticketPriceEth);
+      const totalEther = (price * count).toFixed(18);
       const totalWei = parseEther(totalEther);
 
       let tx;
@@ -347,9 +411,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setIsBuying(false);
       setTimeout(() => setTxStatus(null), 5000);
     }
-  }, [getWriteContract, fetchContractData, referrerAddress, ensureLocalhostNetwork]);
+  }, [getWriteContract, fetchContractData, referrerAddress, ensureLocalhostNetwork, activePoolConfig]);
 
-  /* ── Pick Winner ─────────────────────────────────── */
+  /* ── Pick Winner (active pool) ──────────────────── */
   const pickWinner = useCallback(async () => {
     setIsPicking(true);
     setTxStatus("Picking winner…");
@@ -371,7 +435,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [getWriteContract, fetchContractData, fetchPastWinners]);
 
-  /* ── Restart Lottery ─────────────────────────────── */
+  /* ── Restart Lottery (active pool) ──────────────── */
   const restartLottery = useCallback(async () => {
     setIsRestarting(true);
     setTxStatus("Restarting lottery…");
@@ -421,7 +485,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       await delay(1200);
       
       const buyerAddress = account || "0xusd" + Math.random().toString(16).substring(2, 10).padStart(37, "0");
-      setPlayers((prev) => [...prev, buyerAddress]);
+      setPoolStates((prev) => ({
+        ...prev,
+        [activePoolId]: {
+          ...prev[activePoolId],
+          players: [...prev[activePoolId].players, buyerAddress],
+        },
+      }));
       
       setTxStatus("Ticket purchased with USD! 🎉");
     } catch (err: unknown) {
@@ -430,7 +500,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setIsBuying(false);
       setTimeout(() => setTxStatus(null), 4000);
     }
-  }, [account]);
+  }, [account, activePoolId]);
 
   /* ── Effects ─────────────────────────────────────── */
   useEffect(() => {
@@ -450,7 +520,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleAccountsChanged = (...args: unknown[]) => {
       const accs = args[0] as string[];
       providerRef.current = null;
-      readContractRef.current = null;
+      readContractsRef.current.clear();
       setAccount(accs.length > 0 ? accs[0].toLowerCase() : null);
     };
 
@@ -472,27 +542,30 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
   }, [mounted, fetchContractData, fetchPastWinners, startCountdownPoller, fetchEthPrice]);
 
-  /* ── Auto-pick winner effect ─────────────────────── */
-  const autoPickTriggeredRef = useRef(false);
+  /* ── Auto-pick winner effect (active pool) ──────── */
+  const autoPickTriggeredRef = useRef<Set<string>>(new Set());
   const isOwner = account !== null && owner !== "" && account === owner;
 
   useEffect(() => {
-    if (timeRemaining > 0) {
-      autoPickTriggeredRef.current = false;
+    const pool = poolStates[activePoolId];
+    if (!pool) return;
+
+    if (pool.timeRemaining > 0) {
+      autoPickTriggeredRef.current.delete(activePoolId);
       return;
     }
 
     if (
-      timeRemaining === 0 &&
+      pool.timeRemaining === 0 &&
       isOwner &&
-      players.length > 0 &&
+      pool.players.length > 0 &&
       !isPicking &&
-      !autoPickTriggeredRef.current
+      !autoPickTriggeredRef.current.has(activePoolId)
     ) {
-      autoPickTriggeredRef.current = true;
+      autoPickTriggeredRef.current.add(activePoolId);
       pickWinner();
     }
-  }, [timeRemaining, isOwner, players.length, isPicking, pickWinner]);
+  }, [activePoolId, poolStates, isOwner, isPicking, pickWinner]);
 
   return (
     <WalletContext.Provider
@@ -501,18 +574,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         account,
         referrerAddress,
         isConnecting,
-        timeRemaining,
-        ticketPrice,
-        players,
-        recentWinner,
         owner,
-        lotteryOpen,
         isBuying,
         isPicking,
         isRestarting,
         txStatus,
-        pastWinners,
         ethUsdPrice,
+
+        activePoolId,
+        setActivePoolId,
+        pools: POOLS,
+        poolStates,
+        activePool,
+        activePoolConfig,
+
         buyTicketWithUsd,
         connectWallet,
         disconnectWallet,

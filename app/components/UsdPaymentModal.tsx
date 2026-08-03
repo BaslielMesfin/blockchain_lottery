@@ -9,7 +9,7 @@ interface UsdPaymentModalProps {
 }
 
 export function UsdPaymentModal({ isOpen, onClose }: UsdPaymentModalProps) {
-  const { ticketPrice, ethUsdPrice, buyTicketWithUsd, isBuying } = useWallet();
+  const { activePool, ethUsdPrice, buyTicketWithUsd, isBuying } = useWallet();
   
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
@@ -23,7 +23,7 @@ export function UsdPaymentModal({ isOpen, onClose }: UsdPaymentModalProps) {
     name?: string;
   }>({});
 
-  const ticketPriceUsd = parseFloat(ticketPrice) * ethUsdPrice;
+  const ticketPriceUsd = parseFloat(activePool.ticketPrice) * ethUsdPrice;
 
   // Clear fields on close
   useEffect(() => {
@@ -168,7 +168,7 @@ export function UsdPaymentModal({ isOpen, onClose }: UsdPaymentModalProps) {
                 Ticket Price (ETH)
               </span>
               <span className="font-ticket-id font-bold text-sm text-primary">
-                {ticketPrice} ETH
+                {activePool.ticketPrice} ETH
               </span>
             </div>
             <div className="text-right">

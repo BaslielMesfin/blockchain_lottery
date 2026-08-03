@@ -53,20 +53,49 @@ export default function TermsPage() {
       ),
     },
     {
+      id: "pools",
+      title: "3. Multi-Pool Tiers",
+      icon: "layers",
+      content: (
+        <div className="flex flex-col gap-3 text-sm text-on-surface-variant font-body-md">
+          <p>
+            The platform operates 4 independent lottery pools, each with its own smart contract, timer, player list, and jackpot:
+          </p>
+          <ul className="list-disc list-inside flex flex-col gap-1.5 font-label-mono text-xs text-primary">
+            <li>
+              <strong className="text-secondary-fixed">Flash (1 Minute):</strong> 0.01 ETH per ticket — rapid-fire rounds for quick thrills.
+            </li>
+            <li>
+              <strong className="text-secondary-fixed">Express (1 Hour):</strong> 0.01 ETH per ticket — fast turnaround with moderate jackpots.
+            </li>
+            <li>
+              <strong className="text-secondary-fixed">Standard (6 Hours):</strong> 0.01 ETH per ticket — balanced pool for daily players.
+            </li>
+            <li>
+              <strong className="text-secondary-fixed">Mega (1 Week):</strong> 0.01 ETH per ticket — massive jackpots for patient players.
+            </li>
+          </ul>
+          <p className="font-label-mono text-xs text-on-surface-variant/80">
+            Each pool runs on its own isolated smart contract. Funds, referrals, and rollover balances never mix between pools.
+          </p>
+        </div>
+      ),
+    },
+    {
       id: "rollover",
-      title: "3. Zero-Signature Automatic Round Rollover",
+      title: "4. Zero-Signature Automatic Round Rollover",
       icon: "update",
       content: (
         <div className="flex flex-col gap-3 text-sm text-on-surface-variant font-body-md">
           <p>
-            Rounds are governed by a 2-hour (7,200 seconds) duration timer.
+            Each pool has its own round timer. When a round expires:
           </p>
           <ul className="list-disc list-inside flex flex-col gap-1.5 font-label-mono text-xs text-primary">
             <li>
-              If a round expires, buyer entry is never blocked. The smart contract automatically detects the expiration timestamp upon the next ticket purchase.
+              Buyer entry is never blocked. The smart contract automatically detects the expiration timestamp upon the next ticket purchase.
             </li>
             <li>
-              The contract clears previous round participants and initializes a new 2-hour countdown immediately inside the buyer&apos;s transaction.
+              The contract clears previous round participants and initializes a new countdown immediately inside the buyer&apos;s transaction.
             </li>
             <li>
               No owner signature or administrative intervention is required to restart active rounds.
@@ -77,7 +106,7 @@ export default function TermsPage() {
     },
     {
       id: "security",
-      title: "4. Autonomous Execution & Verification",
+      title: "5. Autonomous Execution & Verification",
       icon: "verified_user",
       content: (
         <div className="flex flex-col gap-3 text-sm text-on-surface-variant font-body-md">

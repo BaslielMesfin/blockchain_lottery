@@ -8,14 +8,14 @@ export default function RulesPage() {
   const rules = [
     {
       step: "01",
-      title: "Buy A Ticket",
-      desc: "Each ticket costs 0.01 ETH. You can purchase as many tickets as you want during an active round to increase your chances.",
+      title: "Pick A Pool & Buy",
+      desc: "Choose from 4 lottery pools: Flash (1 min), Express (1 hr), Standard (6 hr), or Mega (1 week). All tickets cost 0.01 ETH. Buy as many as you want per round to increase your chances.",
       icon: "confirmation_number",
     },
     {
       step: "02",
       title: "Watch The Timer",
-      desc: "Each lottery round runs on a set timer (e.g. 5 minutes). The live countdown displays time remaining until draw.",
+      desc: "Each pool has its own independent timer. All 4 pools run simultaneously — switch between them using the tab bar on the Draws page to see live countdowns.",
       icon: "timer",
     },
     {
