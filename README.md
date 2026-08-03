@@ -1,6 +1,6 @@
 # 🎟️ ETH LOTTERY — 100% Autonomous Multi-Pool Jackpot dApp 🚀
 
-**ETH Lottery** is a 100% autonomous, trustless Web3 dApp built with Next.js, Tailwind CSS, and Solidity. Featuring a tactile cyberpunk "ticket-stub" interface, players buy 0.01 ETH tickets across **4 multi-tier pools** (1-Min Flash, 1-Hour Express, 6-Hour Standard, 1-Week Mega) to compete for an automated **70% winner jackpot**, **20% referrer reward** (or **20% jackpot rollover** if unreferred), and **10% house fee** when the round timer expires. 💰
+**ETH Lottery** is an autonomous Web3 dApp built with Next.js, Tailwind CSS, and Solidity. Featuring a cyberpunk "ticket-stub" interface, players buy 0.01 ETH tickets across 4 pool tiers (1-Min, 1-Hour, 6-Hour, 1-Week) to win an automated 70% jackpot, 20% referrer reward (or jackpot rollover), and 10% house fee. 💰
 
 ---
 

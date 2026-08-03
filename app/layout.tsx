@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ETH LOTTERY — Autonomous Multi-Pool Web3 Jackpot dApp",
-  description: "100% autonomous, trustless time-based lottery on Ethereum. Play 4 multi-tier pools (1-Min Flash, 1-Hour Express, 6-Hour Standard, 1-Week Mega) with 0.01 ETH tickets, 70/20/10 payouts, and automatic jackpot rollovers.",
+  description: "ETH Lottery is an autonomous Web3 dApp built with Next.js, Tailwind CSS, and Solidity. Featuring a cyberpunk ticket-stub UI, players buy 0.01 ETH tickets across 4 pool tiers (1-Min, 1-Hour, 6-Hour, 1-Week) to win an automated 70% jackpot, 20% referrer reward (or jackpot rollover), and 10% house fee.",
 };
 
 export default function RootLayout({
