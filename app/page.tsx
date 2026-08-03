@@ -65,11 +65,13 @@ export default function DrawsPage() {
   if (!mounted) return null;
 
   const isOwner = account !== null && owner !== "" && account === owner;
-  const totalPool =
+  const totalPoolNum =
     activePool.players.length > 0 && activePool.ticketPrice !== "0"
-      ? (parseFloat(activePool.ticketPrice) * activePool.players.length).toFixed(4)
-      : "0.0000";
-  const winnerPrize = (parseFloat(totalPool) * 0.70).toFixed(4);
+      ? parseFloat(activePool.ticketPrice) * activePool.players.length
+      : 0;
+  const totalPool = totalPoolNum > 0 ? parseFloat(totalPoolNum.toFixed(4)).toString() : "0.00";
+  const winnerPrizeNum = totalPoolNum * 0.70;
+  const winnerPrize = winnerPrizeNum > 0 ? parseFloat(winnerPrizeNum.toFixed(4)).toString() : "0.00";
 
   const isZeroWinner =
     !activePool.recentWinner || activePool.recentWinner === "0x0000000000000000000000000000000000000000";
@@ -277,7 +279,7 @@ export default function DrawsPage() {
                         BUYING…
                       </>
                     ) : (
-                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} (${(parseFloat(activePool.ticketPrice) * ticketCount).toFixed(4)} ETH)`
+                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} (${parseFloat((parseFloat(activePool.ticketPrice) * ticketCount).toFixed(4))} ETH)`
                     )}
                   </button>
                 ) : (
