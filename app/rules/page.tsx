@@ -26,8 +26,8 @@ export default function RulesPage() {
     },
     {
       step: "04",
-      title: "90% Payout & Fee",
-      desc: "90% of the jackpot pool is sent directly to the winner's wallet. The remaining 10% is allocated as the protocol house fee.",
+      title: "70 / 20 / 10 Prize Split & Rollover",
+      desc: "70% of the jackpot is sent directly to the winner's wallet, 20% goes to their referrer (or rolls over into the next jackpot if unreferred), and 10% is the house fee.",
       icon: "payments",
     },
   ];

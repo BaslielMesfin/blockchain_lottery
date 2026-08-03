@@ -1,4 +1,4 @@
-export const CONTRACT_ADDRESS = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
+export const CONTRACT_ADDRESS = "0x0165878A594ca255338adfa4d48449f69242Eb8F";
 
 export const CONTRACT_ABI = [
     {
@@ -87,6 +87,12 @@ export const CONTRACT_ABI = [
                 "internalType": "uint256",
                 "name": "referrerReward",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "rolledOverAmount",
+                "type": "uint256"
             }
         ],
         "name": "WinnerPicked",
@@ -108,6 +114,19 @@ export const CONTRACT_ABI = [
     {
         "inputs": [],
         "name": "REFERRER_FEE_PERCENT",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "WINNER_FEE_PERCENT",
         "outputs": [
             {
                 "internalType": "uint256",
@@ -310,6 +329,19 @@ export const CONTRACT_ABI = [
         "name": "restartLottery",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "rolloverBalance",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
     {

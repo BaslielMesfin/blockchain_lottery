@@ -97,7 +97,7 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
       expect(player1BalAfter - player1BalBefore).to.equal(expectedWinnerPrize);
     });
 
-    it("Should distribute 90% winner, 10% owner when winner has NO referrer", async function () {
+    it("Should distribute 70% winner, 10% owner, and rollover 20% into next jackpot when winner has NO referrer", async function () {
       const { lottery, ticketPrice, owner, player1, player2, ethers } = await deployFixture();
 
       // Player 1 buys ticket without referrer
@@ -109,7 +109,8 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
 
       const totalPool = ticketPrice; // 0.01 ETH
       const expectedHouseFee = (totalPool * 10n) / 100n; // 10%
-      const expectedWinnerPrize = (totalPool * 90n) / 100n; // 90%
+      const expectedWinnerPrize = (totalPool * 70n) / 100n; // 70%
+      const expectedRollover = (totalPool * 20n) / 100n; // 20%
 
       const ownerBalBefore = await ethers.provider.getBalance(owner.address);
       const player1BalBefore = await ethers.provider.getBalance(player1.address);
@@ -119,9 +120,11 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
 
       const ownerBalAfter = await ethers.provider.getBalance(owner.address);
       const player1BalAfter = await ethers.provider.getBalance(player1.address);
+      const rolloverBal = await lottery.rolloverBalance();
 
       expect(ownerBalAfter - ownerBalBefore).to.equal(expectedHouseFee);
       expect(player1BalAfter - player1BalBefore).to.equal(expectedWinnerPrize);
+      expect(rolloverBal).to.equal(expectedRollover);
     });
   });
 });

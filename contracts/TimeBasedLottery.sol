@@ -7,9 +7,9 @@ pragma solidity ^0.8.28;
  * 
  * Features:
  * - 70% Winner Prize / 20% Referrer Reward / 10% House Fee
+ * - 20% Unreferred Jackpot Rollover: If a winner has no referrer, the 20% referral fee is automatically rolled over into the next round's jackpot!
  * - 100% Autonomous: Anyone can draw the winner when the timer expires.
  * - Auto-Rollover: Buying a ticket in an expired round automatically draws the previous winner or restarts the round.
- * - No Admin Privilege: Owner cannot alter funds, choose winners, or pause rounds.
  */
 contract TimeBasedLottery {
     address public owner;
@@ -20,6 +20,7 @@ contract TimeBasedLottery {
 
     address payable[] public players;
     address public recentWinner;
+    uint256 public rolloverBalance; // Rolled over ETH from previous unreferred rounds
 
     // Referrer tracking: buyer address => referrer address
     mapping(address => address) public referrers;
@@ -27,9 +28,10 @@ contract TimeBasedLottery {
     // Payout percentages
     uint256 public constant HOUSE_FEE_PERCENT = 10;
     uint256 public constant REFERRER_FEE_PERCENT = 20;
+    uint256 public constant WINNER_FEE_PERCENT = 70;
 
     event TicketPurchased(address indexed player, uint256 amount, address indexed referrer);
-    event WinnerPicked(address indexed winner, uint256 prizeAmount, uint256 houseFee, address indexed referrer, uint256 referrerReward);
+    event WinnerPicked(address indexed winner, uint256 prizeAmount, uint256 houseFee, address indexed referrer, uint256 referrerReward, uint256 rolledOverAmount);
     event RoundRolledOver(uint256 newEndTime);
 
     /**
@@ -109,10 +111,10 @@ contract TimeBasedLottery {
     }
 
     /**
-     * @dev Internal function to select winner, execute 70/20/10 payouts, and reset round.
+     * @dev Internal function to select winner, execute 70/20/10 payouts, and rollover unreferred 20%.
      */
     function _executePickWinner() internal {
-        uint256 totalPool = address(this).balance - msg.value; // Exclude new buyer's ETH if called during buy
+        uint256 totalPool = address(this).balance - msg.value; // Exclude new buyer's ETH if called during buyTicket
         if (totalPool == 0) {
             totalPool = address(this).balance;
         }
@@ -128,17 +130,18 @@ contract TimeBasedLottery {
         recentWinner = winner;
         
         // 2. Calculate Payouts
-        uint256 houseFee = (totalPool * HOUSE_FEE_PERCENT) / 100;
+        uint256 houseFee = (totalPool * HOUSE_FEE_PERCENT) / 100; // 10%
+        uint256 prizeAmount = (totalPool * WINNER_FEE_PERCENT) / 100; // 70%
         address winnerReferrer = referrers[winner];
         uint256 referrerReward = 0;
-        uint256 prizeAmount = 0;
+        uint256 rolledOverAmount = 0;
 
         if (winnerReferrer != address(0)) {
-            referrerReward = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20%
-            prizeAmount = totalPool - houseFee - referrerReward;      // 70%
+            referrerReward = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20% to referrer
         } else {
             referrerReward = 0;
-            prizeAmount = totalPool - houseFee;                       // 90%
+            rolledOverAmount = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20% rolled over to next jackpot
+            rolloverBalance += rolledOverAmount;
         }
 
         // 3. Reset state for the next round BEFORE making transfers (Reentrancy Guard)
@@ -146,19 +149,21 @@ contract TimeBasedLottery {
         lotteryEndTime = block.timestamp + duration;
         lotteryOpen = true;
 
-        // 4. Send payouts
+        // 4. Send house fee (10%) to owner
         (bool successOwner, ) = payable(owner).call{value: houseFee}("");
         require(successOwner, "Failed to send fee to owner");
 
+        // 5. Send referrer reward (20%) if applicable
         if (referrerReward > 0 && winnerReferrer != address(0)) {
             (bool successRef, ) = payable(winnerReferrer).call{value: referrerReward}("");
             require(successRef, "Failed to send reward to referrer");
         }
 
+        // 6. Send 70% prize jackpot to winner
         (bool successWinner, ) = winner.call{value: prizeAmount}("");
         require(successWinner, "Failed to send prize to winner");
 
-        emit WinnerPicked(winner, prizeAmount, houseFee, winnerReferrer, referrerReward);
+        emit WinnerPicked(winner, prizeAmount, houseFee, winnerReferrer, referrerReward, rolledOverAmount);
     }
 
     /**

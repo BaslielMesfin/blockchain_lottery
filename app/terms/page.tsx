@@ -20,7 +20,7 @@ export default function TermsPage() {
               <strong className="text-secondary-fixed">70% Winner Payout:</strong> Allocated directly to the winning wallet address.
             </li>
             <li>
-              <strong className="text-secondary-fixed">20% Referrer Reward:</strong> Transferred automatically to the registered referrer wallet of the winner. If the winner has no registered referrer, this 20% is added to the winner&apos;s payout (making it a 90% total jackpot).
+              <strong className="text-secondary-fixed">20% Referrer Reward / Rollover:</strong> Transferred automatically to the registered referrer wallet of the winner. If the winner has no registered referrer, this 20% automatically rolls over into the contract jackpot for the next round!
             </li>
             <li>
               <strong className="text-secondary-fixed">10% Protocol House Fee:</strong> Allocated to the contract owner to cover protocol maintenance, hosting, and gas infrastructure.
