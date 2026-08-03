@@ -388,9 +388,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (!contract) throw new Error("No contract");
 
       const targetRef = customReferrer || referrerAddress || "0x0000000000000000000000000000000000000000";
-      const price = parseFloat(activePoolConfig.ticketPriceEth);
-      const totalEther = (price * count).toFixed(18);
-      const totalWei = parseEther(totalEther);
+      const unitPriceWei = parseEther(activePoolConfig.ticketPriceEth);
+      const totalWei = unitPriceWei * BigInt(count);
 
       let tx;
       if (typeof contract.buyTicketsWithReferrer === "function") {
