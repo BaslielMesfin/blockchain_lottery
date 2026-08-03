@@ -46,8 +46,10 @@ export default function DrawsPage() {
     owner,
     isBuying,
     isPicking,
+    isRestarting,
     buyTicket,
     pickWinner,
+    restartLottery,
     connectWallet,
     ethUsdPrice,
     activePoolId,
@@ -404,6 +406,15 @@ export default function DrawsPage() {
                 >
                   <span className="material-symbols-outlined text-base">emoji_events</span>
                   <span>{isPicking ? "DRAWING WINNER…" : `TRIGGER WINNER DRAW (${activePool.players.length} TICKET${activePool.players.length > 1 ? "S" : ""})`}</span>
+                </button>
+              ) : activePool.timeRemaining === 0 && activePool.players.length === 0 ? (
+                <button
+                  onClick={restartLottery}
+                  disabled={isRestarting}
+                  className="bg-secondary-fixed text-on-secondary-fixed border border-secondary-fixed px-4 py-2.5 font-label-mono text-xs font-bold hover:shadow-[3px_3px_0px_0px_#000] active:translate-y-0.5 transition-all w-full text-center uppercase flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">refresh</span>
+                  <span>{isRestarting ? "RESTARTING ROUND…" : "RESTART EMPTY ROUND (0 TICKETS)"}</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2 font-label-mono text-[10px] text-secondary-fixed bg-secondary-fixed/10 px-3 py-2 border border-secondary-fixed/30 font-bold">
