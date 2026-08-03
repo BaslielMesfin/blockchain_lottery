@@ -138,10 +138,11 @@ contract TimeBasedLottery {
 
         if (winnerReferrer != address(0)) {
             referrerReward = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20% to referrer
+            rolloverBalance = 0; // All rollover balance distributed in this round
         } else {
             referrerReward = 0;
             rolledOverAmount = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20% rolled over to next jackpot
-            rolloverBalance += rolledOverAmount;
+            rolloverBalance = rolledOverAmount; // Set rollover balance for next round
         }
 
         // 3. Reset state for the next round BEFORE making transfers (Reentrancy Guard)

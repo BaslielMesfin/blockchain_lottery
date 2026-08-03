@@ -12,7 +12,7 @@ export const POOLS: PoolConfig[] = [
         "id": "flash",
         "name": "1-MIN FLASH",
         "icon": "bolt",
-        "address": "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e",
+        "address": "0xf5059a5D33d5853360D16C683c16e67980206f36",
         "duration": 60,
         "ticketPriceEth": "0.01"
     },
@@ -20,7 +20,7 @@ export const POOLS: PoolConfig[] = [
         "id": "express",
         "name": "1-HOUR EXPRESS",
         "icon": "avg_pace",
-        "address": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
+        "address": "0x95401dc811bb5740090279Ba06cfA8fcF6113778",
         "duration": 3600,
         "ticketPriceEth": "0.01"
     },
@@ -28,7 +28,7 @@ export const POOLS: PoolConfig[] = [
         "id": "standard",
         "name": "6-HOUR STANDARD",
         "icon": "local_fire_department",
-        "address": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+        "address": "0x998abeb3E57409262aE5b751f60747921B33613E",
         "duration": 21600,
         "ticketPriceEth": "0.01"
     },
@@ -36,7 +36,7 @@ export const POOLS: PoolConfig[] = [
         "id": "mega",
         "name": "1-WEEK MEGA",
         "icon": "diamond",
-        "address": "0x9A676e781A523b5d0C0e43731313A708CB607508",
+        "address": "0x70e0bA845a1A0F2DA3359C97E0285013525FFC49",
         "duration": 604800,
         "ticketPriceEth": "0.01"
     }

@@ -110,23 +110,23 @@ export default function HistoryPage() {
                         PRIZE PAYOUT
                       </span>
                       <span className="font-headline-lg text-2xl md:text-3xl text-primary-container block leading-tight">
-                        {draw.prizeAmount} ETH
+                        ${(parseFloat(draw.prizeAmount) * ethUsdPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                       </span>
                       <span className="font-label-mono text-[10px] text-on-surface-variant/90 block font-bold">
-                        ~${(parseFloat(draw.prizeAmount) * ethUsdPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                        ({draw.prizeAmount} ETH)
                       </span>
                     </div>
 
                     <div className="text-right font-label-mono text-[10px] text-on-surface-variant flex flex-col gap-0.5">
-                      <span>House Fee (10%): {draw.houseFee} ETH (~${(parseFloat(draw.houseFee) * ethUsdPrice).toFixed(2)} USD)</span>
+                      <span>House Fee (10%): ${(parseFloat(draw.houseFee) * ethUsdPrice).toFixed(2)} USD ({draw.houseFee} ETH)</span>
                       {draw.referrer && draw.referrer !== "0x0000000000000000000000000000000000000000" && draw.referrerReward ? (
                         <span className="text-secondary-fixed font-bold">
-                          Referrer Fee (20%): {shortAddress(draw.referrer)} ({draw.referrerReward} ETH / ~${(parseFloat(draw.referrerReward) * ethUsdPrice).toFixed(2)} USD)
+                          Referrer Fee (20%): {shortAddress(draw.referrer)} (${(parseFloat(draw.referrerReward) * ethUsdPrice).toFixed(2)} USD / {draw.referrerReward} ETH)
                         </span>
                       ) : draw.rolledOverAmount && (
                         <span className="text-secondary-fixed font-bold flex items-center justify-end gap-1">
                           <span className="material-symbols-outlined text-[10px]">autorenew</span>
-                          Rolled Over (20%): +{draw.rolledOverAmount} ETH (~${(parseFloat(draw.rolledOverAmount) * ethUsdPrice).toFixed(2)} USD)
+                          Rolled Over (20%): +${(parseFloat(draw.rolledOverAmount) * ethUsdPrice).toFixed(2)} USD (+{draw.rolledOverAmount} ETH)
                         </span>
                       )}
                       <span className="block opacity-60">Block #{draw.blockNumber}</span>
