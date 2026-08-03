@@ -23,6 +23,7 @@ export interface DrawWinnerEvent {
   houseFee: string;
   referrer?: string;
   referrerReward?: string;
+  rolledOverAmount?: string;
   blockNumber: number;
 }
 
@@ -32,6 +33,7 @@ export interface PoolState {
   players: string[];
   recentWinner: string;
   lotteryOpen: boolean;
+  rolloverBalance: string;
   pastWinners: DrawWinnerEvent[];
 }
 
@@ -72,6 +74,7 @@ function createEmptyPoolState(pool: PoolConfig): PoolState {
     players: [],
     recentWinner: "",
     lotteryOpen: true,
+    rolloverBalance: "0",
     pastWinners: [],
   };
 }
@@ -212,7 +215,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const code = await provider.getCode(pool.address);
         if (!code || code === "0x" || code === "0x0") continue;
 
-        const [price, playerList, winner, contractOwner, isOpen, endTime] =
+        const [price, playerList, winner, contractOwner, isOpen, endTime, rollover] =
           await Promise.all([
             contract.ticketPrice(),
             contract.getPlayers(),
@@ -220,6 +223,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             contract.owner(),
             contract.lotteryOpen(),
             contract.lotteryEndTime(),
+            contract.rolloverBalance(),
           ]);
 
         // Set owner from any pool (they all share the same deployer)
@@ -235,6 +239,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             players: playerList as string[],
             recentWinner: winner as string,
             lotteryOpen: isOpen as boolean,
+            rolloverBalance: formatEther(rollover),
           },
         }));
       } catch (err) {
@@ -266,6 +271,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             houseFee: formatEther(args[2]),
             referrer: args[3] ? (args[3] as string) : undefined,
             referrerReward: args[4] ? formatEther(args[4]) : "0",
+            rolledOverAmount: args[5] ? formatEther(args[5]) : "0",
             blockNumber: evt.blockNumber,
           };
         }).reverse();

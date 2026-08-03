@@ -65,10 +65,12 @@ export default function DrawsPage() {
   if (!mounted) return null;
 
   const isOwner = account !== null && owner !== "" && account === owner;
-  const totalPoolVal =
+  const currentSalesEth =
     activePool.players.length > 0 && activePool.ticketPrice !== "0"
       ? parseFloat(activePool.ticketPrice) * activePool.players.length
       : 0;
+  const rolloverEth = parseFloat(activePool.rolloverBalance || "0");
+  const totalPoolVal = currentSalesEth + rolloverEth;
   const totalPool = parseFloat(totalPoolVal.toFixed(4)).toString();
   const winnerPrize = parseFloat((totalPoolVal * 0.70).toFixed(4)).toString();
 
@@ -151,6 +153,13 @@ export default function DrawsPage() {
                 <div className="font-label-mono text-sm md:text-base text-void-black/70 mb-2 font-bold">
                   ({winnerPrize} ETH)
                 </div>
+
+                {rolloverEth > 0 && (
+                  <span className="font-label-mono text-[10px] md:text-xs bg-void-black text-secondary-fixed px-3 py-1 font-bold rounded-full flex items-center gap-1 mt-1 border border-secondary-fixed/40">
+                    <span className="material-symbols-outlined text-xs">autorenew</span>
+                    +{rolloverEth} ETH ROLLED OVER FROM PREVIOUS UNREFERRED WINNER!
+                  </span>
+                )}
 
                 <div className="flex gap-4 mt-6">
                   <div className="bg-void-black/5 px-4 py-2 border border-void-black/10">
