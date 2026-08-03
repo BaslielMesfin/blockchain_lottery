@@ -34,6 +34,17 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
       expect(players[0]).to.equal(player1.address);
     });
 
+    it("Should allow buying multiple tickets in bulk", async function () {
+      const { lottery, ticketPrice, player1 } = await deployFixture();
+
+      const bulkCount = 5n;
+      await lottery.connect(player1).buyTickets(bulkCount, { value: ticketPrice * bulkCount });
+
+      const players = await lottery.getPlayers();
+      expect(players.length).to.equal(5);
+      expect(players.every((p) => p === player1.address)).to.be.true;
+    });
+
     it("Should auto-rollover round if round expired when buying ticket", async function () {
       const { lottery, ticketPrice, player1, player2, ethers } = await deployFixture();
 
@@ -56,7 +67,7 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
 
   describe("70 / 20 / 10 Payout Split", function () {
     it("Should distribute 70% winner, 20% referrer, 10% owner when winner has referrer", async function () {
-      const { lottery, ticketPrice, owner, player1, referrer, ethers } = await deployFixture();
+      const { lottery, ticketPrice, owner, player1, player2, referrer, ethers } = await deployFixture();
 
       // Player 1 buys ticket with referrer
       await lottery.connect(player1).buyTicketWithReferrer(referrer.address, { value: ticketPrice });
@@ -74,21 +85,20 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
       const referrerBalBefore = await ethers.provider.getBalance(referrer.address);
       const player1BalBefore = await ethers.provider.getBalance(player1.address);
 
-      const tx = await lottery.connect(owner).pickWinner();
-      const receipt = await tx.wait();
-      const gasUsed = receipt!.fee;
+      const tx = await lottery.connect(player2).pickWinner(); // Permissionless call by player2
+      await tx.wait();
 
       const ownerBalAfter = await ethers.provider.getBalance(owner.address);
       const referrerBalAfter = await ethers.provider.getBalance(referrer.address);
       const player1BalAfter = await ethers.provider.getBalance(player1.address);
 
-      expect(ownerBalAfter + gasUsed - ownerBalBefore).to.equal(expectedHouseFee);
+      expect(ownerBalAfter - ownerBalBefore).to.equal(expectedHouseFee);
       expect(referrerBalAfter - referrerBalBefore).to.equal(expectedReferrerReward);
       expect(player1BalAfter - player1BalBefore).to.equal(expectedWinnerPrize);
     });
 
     it("Should distribute 90% winner, 10% owner when winner has NO referrer", async function () {
-      const { lottery, ticketPrice, owner, player1, ethers } = await deployFixture();
+      const { lottery, ticketPrice, owner, player1, player2, ethers } = await deployFixture();
 
       // Player 1 buys ticket without referrer
       await lottery.connect(player1).buyTicket({ value: ticketPrice });
@@ -104,14 +114,13 @@ describe("TimeBasedLottery - Referral, Auto-Rollover & 70/20/10 Split", function
       const ownerBalBefore = await ethers.provider.getBalance(owner.address);
       const player1BalBefore = await ethers.provider.getBalance(player1.address);
 
-      const tx = await lottery.connect(owner).pickWinner();
-      const receipt = await tx.wait();
-      const gasUsed = receipt!.fee;
+      const tx = await lottery.connect(player2).pickWinner(); // Permissionless call by any user
+      await tx.wait();
 
       const ownerBalAfter = await ethers.provider.getBalance(owner.address);
       const player1BalAfter = await ethers.provider.getBalance(player1.address);
 
-      expect(ownerBalAfter + gasUsed - ownerBalBefore).to.equal(expectedHouseFee);
+      expect(ownerBalAfter - ownerBalBefore).to.equal(expectedHouseFee);
       expect(player1BalAfter - player1BalBefore).to.equal(expectedWinnerPrize);
     });
   });

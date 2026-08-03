@@ -66,35 +66,35 @@
   --color-info-cyan: var(--info-cyan);
   --color-error: var(--error);
 
-  --font-display-jackpot: var(--font-anton), Impact, sans-serif;
-  --font-headline-lg: var(--font-anton), Impact, sans-serif;
-  --font-body-md: var(--font-hanken), sans-serif;
-  --font-body-bold: var(--font-hanken), sans-serif;
-  --font-label-mono: var(--font-jetbrains), monospace;
-  --font-ticket-id: var(--font-jetbrains), monospace;
+  --font-display-jackpot: "Anton", Impact, sans-serif;
+  --font-headline-lg: "Anton", Impact, sans-serif;
+  --font-body-md: "Hanken Grotesk", sans-serif;
+  --font-body-bold: "Hanken Grotesk", sans-serif;
+  --font-label-mono: "JetBrains Mono", monospace;
+  --font-ticket-id: "JetBrains Mono", monospace;
 }
 
 /* ── Base ────────────────────────────────────────────── */
 body {
   background-color: var(--background);
   color: var(--on-surface);
-  font-family: var(--font-hanken), sans-serif;
+  font-family: "Hanken Grotesk", sans-serif;
 }
 
 .font-display-jackpot {
-  font-family: var(--font-anton), Impact, sans-serif;
+  font-family: "Anton", Impact, sans-serif;
 }
 
 .font-headline-lg {
-  font-family: var(--font-anton), Impact, sans-serif;
+  font-family: "Anton", Impact, sans-serif;
 }
 
 .font-label-mono {
-  font-family: var(--font-jetbrains), monospace;
+  font-family: "JetBrains Mono", monospace;
 }
 
 .font-ticket-id {
-  font-family: var(--font-jetbrains), monospace;
+  font-family: "JetBrains Mono", monospace;
 }
 
 /* ── Radial Concentric Grid Background ───────────────── */

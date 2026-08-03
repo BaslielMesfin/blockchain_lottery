@@ -1,4 +1,4 @@
-export const CONTRACT_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+export const CONTRACT_ADDRESS = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
 
 export const CONTRACT_ABI = [
     {
@@ -16,6 +16,19 @@ export const CONTRACT_ABI = [
         ],
         "stateMutability": "nonpayable",
         "type": "constructor"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "newEndTime",
+                "type": "uint256"
+            }
+        ],
+        "name": "RoundRolledOver",
+        "type": "event"
     },
     {
         "anonymous": false,
@@ -121,6 +134,37 @@ export const CONTRACT_ABI = [
             }
         ],
         "name": "buyTicketWithReferrer",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "count",
+                "type": "uint256"
+            }
+        ],
+        "name": "buyTickets",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "count",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "_referrer",
+                "type": "address"
+            }
+        ],
+        "name": "buyTicketsWithReferrer",
         "outputs": [],
         "stateMutability": "payable",
         "type": "function"

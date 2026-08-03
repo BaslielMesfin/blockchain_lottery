@@ -26,6 +26,36 @@ export interface DrawWinnerEvent {
   blockNumber: number;
 }
 
+/* ── Human-Friendly Error Parser ────────────────────── */
+function formatUserFriendlyError(err: unknown): string {
+  console.error("[Web3 Technical Log]:", err);
+  const rawMsg = err instanceof Error ? err.message : String(err);
+  const lower = rawMsg.toLowerCase();
+
+  if (
+    lower.includes("user rejected") ||
+    lower.includes("action_rejected") ||
+    lower.includes("user denied") ||
+    lower.includes("rejected action")
+  ) {
+    return "Error: Transaction cancelled in wallet.";
+  }
+  if (lower.includes("insufficient funds")) {
+    return "Error: Insufficient ETH balance in your wallet to cover ticket & gas.";
+  }
+  if (lower.includes("nonce") || lower.includes("nonce_expired")) {
+    return "Error: Wallet nonce out of sync. Please reset transaction history in wallet settings.";
+  }
+  if (lower.includes("network") || lower.includes("cannot connect") || lower.includes("failed to fetch")) {
+    return "Error: Network connection issue. Please check if your network node is running.";
+  }
+  if (lower.includes("execution reverted") || lower.includes("call_exception")) {
+    return "Error: Transaction reverted by contract. Round status may have updated.";
+  }
+
+  return "Error: Transaction could not be completed. Please try again.";
+}
+
 interface WalletContextType {
   mounted: boolean;
   account: string | null;
@@ -46,7 +76,7 @@ interface WalletContextType {
   buyTicketWithUsd: (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => Promise<void>;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
-  buyTicket: (customReferrer?: string) => Promise<void>;
+  buyTicket: (customReferrer?: string, count?: number) => Promise<void>;
   pickWinner: () => Promise<void>;
   restartLottery: () => Promise<void>;
   fetchPastWinners: () => Promise<void>;
@@ -248,10 +278,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+
+
   /* ── Connect Wallet ──────────────────────────────── */
   const connectWallet = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) {
-      setTxStatus("Error: Please install MetaMask to use this dApp.");
+      setTxStatus("Error: Please install MetaMask or Rabby to use this dApp.");
       setTimeout(() => setTxStatus(null), 5000);
       return;
     }
@@ -267,8 +299,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => setTxStatus(null), 3000);
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Wallet connection rejected";
-      setTxStatus(`Error: ${message.slice(0, 80)}`);
+      setTxStatus(formatUserFriendlyError(err));
       setTimeout(() => setTxStatus(null), 5000);
     } finally {
       setIsConnecting(false);
@@ -285,7 +316,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /* ── Buy Ticket ──────────────────────────────────── */
-  const buyTicket = useCallback(async (customReferrer?: string) => {
+  const buyTicket = useCallback(async (customReferrer?: string, count: number = 1) => {
     setIsBuying(true);
     setTxStatus("Sending transaction…");
     try {
@@ -294,24 +325,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (!contract) throw new Error("No contract");
 
       const targetRef = customReferrer || referrerAddress || "0x0000000000000000000000000000000000000000";
+      const totalEther = (0.01 * count).toFixed(4);
+      const totalWei = parseEther(totalEther);
 
       let tx;
-      if (typeof contract.buyTicketWithReferrer === "function") {
-        tx = await contract.buyTicketWithReferrer(targetRef, { value: parseEther("0.01") });
+      if (typeof contract.buyTicketsWithReferrer === "function") {
+        tx = await contract.buyTicketsWithReferrer(count, targetRef, { value: totalWei });
+      } else if (typeof contract.buyTicketWithReferrer === "function") {
+        tx = await contract.buyTicketWithReferrer(targetRef, { value: totalWei });
       } else {
-        tx = await contract.buyTicket({ value: parseEther("0.01") });
+        tx = await contract.buyTicket({ value: totalWei });
       }
 
       setTxStatus("Mining… please wait");
       await tx.wait();
-      setTxStatus("Ticket purchased! 🎉");
+      setTxStatus(`${count > 1 ? `${count} Tickets` : "Ticket"} purchased! 🎉`);
       await fetchContractData();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Transaction failed";
-      setTxStatus(`Error: ${message.slice(0, 80)}`);
+      setTxStatus(formatUserFriendlyError(err));
     } finally {
       setIsBuying(false);
-      setTimeout(() => setTxStatus(null), 4000);
+      setTimeout(() => setTxStatus(null), 5000);
     }
   }, [getWriteContract, fetchContractData, referrerAddress, ensureLocalhostNetwork]);
 
@@ -330,11 +364,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       await fetchContractData();
       await fetchPastWinners();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Transaction failed";
-      setTxStatus(`Error: ${message.slice(0, 80)}`);
+      setTxStatus(formatUserFriendlyError(err));
     } finally {
       setIsPicking(false);
-      setTimeout(() => setTxStatus(null), 4000);
+      setTimeout(() => setTxStatus(null), 5000);
     }
   }, [getWriteContract, fetchContractData, fetchPastWinners]);
 
@@ -352,11 +385,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setTxStatus("Lottery restarted! 🎉");
       await fetchContractData();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Transaction failed";
-      setTxStatus(`Error: ${message.slice(0, 80)}`);
+      setTxStatus(formatUserFriendlyError(err));
     } finally {
       setIsRestarting(false);
-      setTimeout(() => setTxStatus(null), 4000);
+      setTimeout(() => setTxStatus(null), 5000);
     }
   }, [getWriteContract, fetchContractData]);
   

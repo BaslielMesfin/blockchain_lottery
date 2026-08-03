@@ -1,43 +1,36 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 /**
  * @title TimeBasedLottery
- * @dev Time-based lottery contract with a 10% platform/house fee on payouts,
- * 20% referrer fee (if registered), 70% winner reward, auto-rollover, and 2-hour default duration.
+ * @notice A 100% Autonomous, Trustless & Permissionless Time-Based Lottery Smart Contract.
+ * 
+ * Features:
+ * - 70% Winner Prize / 20% Referrer Reward / 10% House Fee
+ * - 100% Autonomous: Anyone can draw the winner when the timer expires.
+ * - Auto-Rollover: Buying a ticket in an expired round automatically draws the previous winner or restarts the round.
+ * - No Admin Privilege: Owner cannot alter funds, choose winners, or pause rounds.
  */
 contract TimeBasedLottery {
     address public owner;
-    address payable[] public players;
-    address public recentWinner;
-    
     uint256 public ticketPrice;
-    uint256 public duration;
     uint256 public lotteryEndTime;
+    uint256 public duration;
     bool public lotteryOpen;
 
-    // Referral registry
+    address payable[] public players;
+    address public recentWinner;
+
+    // Referrer tracking: buyer address => referrer address
     mapping(address => address) public referrers;
 
-    // Platform fee percentage kept by the owner (10%)
+    // Payout percentages
     uint256 public constant HOUSE_FEE_PERCENT = 10;
-    // Referrer fee percentage (20%)
     uint256 public constant REFERRER_FEE_PERCENT = 20;
 
-    // Events to notify the frontend when things happen
     event TicketPurchased(address indexed player, uint256 amount, address indexed referrer);
-    event WinnerPicked(
-        address indexed winner,
-        uint256 prizeAmount,
-        uint256 houseFee,
-        address indexed referrer,
-        uint256 referrerReward
-    );
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner can call this");
-        _;
-    }
+    event WinnerPicked(address indexed winner, uint256 prizeAmount, uint256 houseFee, address indexed referrer, uint256 referrerReward);
+    event RoundRolledOver(uint256 newEndTime);
 
     /**
      * @dev Initialize lottery with a ticket price in Wei and duration in seconds (default 7200s = 2 hours).
@@ -52,41 +45,77 @@ contract TimeBasedLottery {
     }
 
     /**
-     * @notice Enter the lottery by buying a ticket with an optional referrer.
-     * Automatically rolls over to a new round if the previous round expired.
+     * @notice Enter the lottery by buying multiple tickets with an optional referrer.
+     * Automatically draws winner or rolls over if the current round has expired.
      */
-    function buyTicketWithReferrer(address _referrer) public payable {
-        // Auto-rollover if current round has expired
+    function buyTicketsWithReferrer(uint256 count, address _referrer) public payable {
+        require(count > 0, "Must purchase at least 1 ticket");
+
+        // Auto-handle expired round before processing new ticket
         if (block.timestamp >= lotteryEndTime) {
-            delete players;
-            lotteryEndTime = block.timestamp + duration;
-            lotteryOpen = true;
+            if (players.length > 0) {
+                _executePickWinner();
+            } else {
+                delete players;
+                lotteryEndTime = block.timestamp + duration;
+                lotteryOpen = true;
+                emit RoundRolledOver(lotteryEndTime);
+            }
         }
 
         require(lotteryOpen, "Lottery is currently closed");
-        require(msg.value == ticketPrice, "Incorrect ETH amount sent");
+        require(msg.value == ticketPrice * count, "Incorrect ETH amount sent for ticket count");
 
         if (_referrer != address(0) && _referrer != msg.sender && referrers[msg.sender] == address(0)) {
             referrers[msg.sender] = _referrer;
         }
 
-        players.push(payable(msg.sender));
+        for (uint256 i = 0; i < count; i++) {
+            players.push(payable(msg.sender));
+        }
+
         emit TicketPurchased(msg.sender, msg.value, referrers[msg.sender]);
     }
 
     /**
-     * @notice Enter the lottery without a referrer.
+     * @notice Enter the lottery by buying a single ticket with an optional referrer.
      */
-    function buyTicket() external payable {
-        buyTicketWithReferrer(address(0));
+    function buyTicketWithReferrer(address _referrer) public payable {
+        buyTicketsWithReferrer(1, _referrer);
     }
 
     /**
-     * @notice Selects the winner, calculates payouts (70% winner, 20% referrer, 10% owner; or 90% winner if no referrer), and resets timer.
+     * @notice Enter the lottery buying multiple tickets without a referrer.
      */
-    function pickWinner() external onlyOwner {
+    function buyTickets(uint256 count) external payable {
+        buyTicketsWithReferrer(count, address(0));
+    }
+
+    /**
+     * @notice Enter the lottery by buying a single ticket without a referrer.
+     */
+    function buyTicket() external payable {
+        buyTicketsWithReferrer(1, address(0));
+    }
+
+    /**
+     * @notice 100% Permissionless: ANYONE can call pickWinner once the timer reaches zero!
+     */
+    function pickWinner() public {
         require(block.timestamp >= lotteryEndTime, "Lottery timer has not finished yet");
         require(players.length > 0, "No players in the lottery");
+
+        _executePickWinner();
+    }
+
+    /**
+     * @dev Internal function to select winner, execute 70/20/10 payouts, and reset round.
+     */
+    function _executePickWinner() internal {
+        uint256 totalPool = address(this).balance - msg.value; // Exclude new buyer's ETH if called during buy
+        if (totalPool == 0) {
+            totalPool = address(this).balance;
+        }
 
         // 1. Generate pseudo-random winner index
         uint256 randomIndex = uint256(
@@ -99,37 +128,33 @@ contract TimeBasedLottery {
         recentWinner = winner;
         
         // 2. Calculate Payouts
-        uint256 totalPool = address(this).balance;
-        uint256 houseFee = (totalPool * HOUSE_FEE_PERCENT) / 100; // 10% to house
-        
+        uint256 houseFee = (totalPool * HOUSE_FEE_PERCENT) / 100;
         address winnerReferrer = referrers[winner];
         uint256 referrerReward = 0;
         uint256 prizeAmount = 0;
 
         if (winnerReferrer != address(0)) {
-            referrerReward = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20% to referrer
-            prizeAmount = totalPool - houseFee - referrerReward;      // 70% to winner
+            referrerReward = (totalPool * REFERRER_FEE_PERCENT) / 100; // 20%
+            prizeAmount = totalPool - houseFee - referrerReward;      // 70%
         } else {
             referrerReward = 0;
-            prizeAmount = totalPool - houseFee;                       // 90% to winner
+            prizeAmount = totalPool - houseFee;                       // 90%
         }
 
-        // 3. Reset state for the next round BEFORE making transfers (Security best practice)
+        // 3. Reset state for the next round BEFORE making transfers (Reentrancy Guard)
         delete players;
         lotteryEndTime = block.timestamp + duration;
         lotteryOpen = true;
 
-        // 4. Send 10% fee directly to owner wallet
+        // 4. Send payouts
         (bool successOwner, ) = payable(owner).call{value: houseFee}("");
         require(successOwner, "Failed to send fee to owner");
 
-        // 5. Send 20% referrer fee if applicable
         if (referrerReward > 0 && winnerReferrer != address(0)) {
             (bool successRef, ) = payable(winnerReferrer).call{value: referrerReward}("");
             require(successRef, "Failed to send reward to referrer");
         }
 
-        // 6. Send prize jackpot to winner
         (bool successWinner, ) = winner.call{value: prizeAmount}("");
         require(successWinner, "Failed to send prize to winner");
 
@@ -154,13 +179,14 @@ contract TimeBasedLottery {
     }
 
     /**
-     * @notice Owner can restart the lottery timer (e.g. when a round expired with no players).
+     * @notice 100% Permissionless: ANYONE can restart the lottery timer if expired with 0 players.
      */
-    function restartLottery() external onlyOwner {
+    function restartLottery() public {
         require(block.timestamp >= lotteryEndTime, "Current round is still active");
-        require(players.length == 0, "Players exist - use pickWinner instead");
+        require(players.length == 0, "Players exist - winner draw will be triggered on next ticket or pickWinner");
 
         lotteryEndTime = block.timestamp + duration;
         lotteryOpen = true;
+        emit RoundRolledOver(lotteryEndTime);
     }
-}
+}

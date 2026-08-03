@@ -44,18 +44,22 @@ export default function DrawsPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [ticketCount, setTicketCount] = useState<number>(1);
 
   if (!mounted) return null;
 
   const isOwner = account !== null && owner !== "" && account === owner;
-  const jackpot =
+  const totalPool =
     players.length > 0 && ticketPrice !== "0"
       ? (parseFloat(ticketPrice) * players.length).toFixed(2)
       : "0.00";
+  const winnerPrize = (parseFloat(totalPool) * 0.70).toFixed(2);
+
   const isZeroWinner =
     !recentWinner || recentWinner === "0x0000000000000000000000000000000000000000";
 
-  const jackpotUsd = parseFloat(jackpot) * ethUsdPrice;
+  const winnerPrizeUsd = parseFloat(winnerPrize) * ethUsdPrice;
+  const totalPoolUsd = parseFloat(totalPool) * ethUsdPrice;
   const ticketPriceUsd = parseFloat(ticketPrice) * ethUsdPrice;
 
   return (
@@ -81,14 +85,14 @@ export default function DrawsPage() {
               <div className="absolute inset-0 border border-success-green opacity-20 pointer-events-none" />
 
               <div className="p-6 md:p-8 flex flex-col items-center justify-center text-center relative z-10">
-                <span className="font-label-mono text-xs md:text-sm text-void-black/70 uppercase tracking-widest mb-3">
-                  Current Pool
+                <span className="font-label-mono text-xs md:text-sm bg-void-black text-success-green uppercase tracking-widest px-4 py-1.5 font-bold mb-3 shadow-md border border-void-black rounded-[100px]">
+                  ★ WINNER PRIZE ★
                 </span>
                 <h2 className="font-display-jackpot text-6xl md:text-8xl text-void-black mb-2 leading-none">
-                  {jackpot} ETH
+                  ${winnerPrizeUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                 </h2>
                 <div className="font-label-mono text-sm md:text-base text-void-black/70 mb-2 font-bold">
-                  ~${jackpotUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                  ({winnerPrize} ETH)
                 </div>
 
                 <div className="flex gap-4 mt-6">
@@ -97,10 +101,10 @@ export default function DrawsPage() {
                       Ticket Price
                     </span>
                     <span className="font-ticket-id text-sm md:text-base font-bold text-void-black block">
-                      {ticketPrice} ETH
+                      ${ticketPriceUsd.toFixed(2)} USD
                     </span>
                     <span className="font-label-mono text-[10px] text-void-black/60 block mt-0.5">
-                      ~${ticketPriceUsd.toFixed(2)} USD
+                      ({ticketPrice} ETH)
                     </span>
                   </div>
                   <div className="bg-void-black/5 px-4 py-2 border border-void-black/10">
@@ -157,9 +161,57 @@ export default function DrawsPage() {
 
               {/* Stub Action */}
               <div className="w-full md:w-1/3 p-6 md:p-8 flex flex-col justify-center items-center bg-surface-container-high/50 gap-3">
+                {/* Quantity Stepper & Input */}
+                <div className="w-full flex flex-col gap-1.5 mb-1">
+                  <span className="font-label-mono text-[10px] text-on-surface-variant/80 uppercase font-bold tracking-wider text-center">
+                    SELECT QUANTITY
+                  </span>
+                  <div className="flex items-center justify-between border border-outline-variant/60 bg-surface-container-lowest">
+                    <button
+                      onClick={() => setTicketCount((prev) => Math.max(1, prev - 1))}
+                      className="px-3 py-2 text-primary hover:bg-surface-container-high font-bold text-lg select-none cursor-pointer"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={ticketCount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setTicketCount(isNaN(val) || val < 1 ? 1 : val);
+                      }}
+                      className="w-16 text-center bg-transparent font-ticket-id font-bold text-base text-primary focus:outline-none"
+                    />
+                    <button
+                      onClick={() => setTicketCount((prev) => prev + 1)}
+                      className="px-3 py-2 text-primary hover:bg-surface-container-high font-bold text-lg select-none cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Preset Buttons */}
+                  <div className="grid grid-cols-4 gap-1 mt-1">
+                    {[1, 5, 10, 25].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => setTicketCount(preset)}
+                        className={`py-1 font-label-mono text-[10px] font-bold transition-all cursor-pointer ${
+                          ticketCount === preset
+                            ? "bg-primary-container text-on-primary-fixed border border-primary-container"
+                            : "bg-surface-container-lowest text-on-surface-variant/70 border border-outline-variant/30 hover:border-primary-container"
+                        }`}
+                      >
+                        +{preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {account ? (
                   <button
-                    onClick={() => buyTicket()}
+                    onClick={() => buyTicket(undefined, ticketCount)}
                     disabled={isBuying || !lotteryOpen}
                     className="w-full bg-primary-container text-on-primary-fixed font-headline-lg text-lg md:text-xl py-3 px-4 hover:shadow-[4px_4px_0px_0px_#000000] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 mb-1 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                   >
@@ -169,7 +221,7 @@ export default function DrawsPage() {
                         BUYING…
                       </>
                     ) : (
-                      "PAY WITH ETH"
+                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} (${(0.01 * ticketCount).toFixed(2)} ETH)`
                     )}
                   </button>
                 ) : (
@@ -186,7 +238,7 @@ export default function DrawsPage() {
                   disabled={isBuying || !lotteryOpen}
                   className="w-full bg-transparent hover:bg-secondary-fixed/10 text-secondary-fixed border-2 border-secondary-fixed/50 font-headline-lg text-lg md:text-xl py-2.5 px-4 hover:shadow-[4px_4px_0px_0px_rgba(0,251,251,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                 >
-                  PAY WITH USD / CARD
+                  PAY WITH USD / CARD (${((0.01 * ticketCount) * ethUsdPrice).toFixed(2)})
                 </button>
 
                 <span className="font-label-mono text-[10px] text-on-surface-variant opacity-70 text-center mt-1">
@@ -275,45 +327,33 @@ export default function DrawsPage() {
               </div>
             </div>
 
-            {/* Admin Panel (Owner Only) */}
-            {isOwner && (
-              <div className="border border-outline-variant/50 bg-surface-container-low/40 p-5 flex flex-col gap-3">
-                <div className="flex items-center gap-2 font-label-mono text-xs font-bold text-warning-orange uppercase tracking-wider">
-                  <span className="material-symbols-outlined text-base">settings_applications</span>
-                  ADMIN CONTROLS
-                </div>
-                
-                {players.length > 0 ? (
-                  <>
-                    <p className="font-body-md text-xs text-on-surface-variant">
-                      {players.length} ticket(s) purchased. Draw the winner to distribute the jackpot.
-                    </p>
-                    <button
-                      onClick={pickWinner}
-                      disabled={isPicking}
-                      className="bg-primary-container text-on-primary-fixed border border-primary-container px-4 py-2.5 font-label-mono text-xs font-bold hover:shadow-[3px_3px_0px_0px_#000] active:translate-y-0 transition-all w-full text-left uppercase flex items-center justify-between cursor-pointer disabled:opacity-50"
-                    >
-                      <span>Draw Winner ({players.length} Ticket{players.length > 1 ? "s" : ""})</span>
-                      {isPicking && <span className="spinner !w-3.5 !h-3.5 !border-on-primary-fixed !border-t-transparent" />}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-body-md text-xs text-on-surface-variant">
-                      No tickets purchased. Restart the timer to begin a new round.
-                    </p>
-                    <button
-                      onClick={restartLottery}
-                      disabled={isRestarting}
-                      className="border border-warning-orange text-warning-orange px-4 py-2.5 font-label-mono text-xs font-bold hover:bg-warning-orange hover:text-void-black active:scale-[0.98] transition-all w-full text-left uppercase flex items-center justify-between cursor-pointer disabled:opacity-50"
-                    >
-                      <span>Restart Round</span>
-                      {isRestarting && <span className="spinner !w-3.5 !h-3.5 !border-warning-orange !border-t-transparent" />}
-                    </button>
-                  </>
-                )}
+            {/* 100% Autonomous Smart Contract Panel (Trustless, No Admin) */}
+            <div className="border border-success-green/40 bg-surface-container-low/60 p-5 flex flex-col gap-3.5 shadow-lg">
+              <div className="flex items-center gap-2 font-label-mono text-xs font-bold text-success-green uppercase tracking-wider">
+                <span className="material-symbols-outlined text-base">verified_user</span>
+                <span>100% AUTONOMOUS CONTRACT</span>
               </div>
-            )}
+              
+              <p className="font-body-md text-xs text-on-surface-variant leading-relaxed">
+                Zero admin control or owner privileges. The smart contract automatically executes 70/20/10 payouts on-chain.
+              </p>
+
+              {timeRemaining === 0 && players.length > 0 ? (
+                <button
+                  onClick={pickWinner}
+                  disabled={isPicking}
+                  className="bg-success-green text-void-black border border-success-green px-4 py-2.5 font-label-mono text-xs font-bold hover:shadow-[3px_3px_0px_0px_#000] active:translate-y-0.5 transition-all w-full text-center uppercase flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">emoji_events</span>
+                  <span>{isPicking ? "DRAWING WINNER…" : `TRIGGER WINNER DRAW (${players.length} TICKET${players.length > 1 ? "S" : ""})`}</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 font-label-mono text-[10px] text-secondary-fixed bg-secondary-fixed/10 px-3 py-2 border border-secondary-fixed/30 font-bold">
+                  <span className="material-symbols-outlined text-sm">lock</span>
+                  <span>AUTONOMOUS DRAW ENFORCED ON-CHAIN</span>
+                </div>
+              )}
+            </div>
           </div>
         </main>
       </div>
