@@ -1,6 +1,6 @@
-# 🎟️ ETH LOTTERY — Decentralized Time-Based Jackpot dApp 🚀
+# 🎟️ ETH LOTTERY — 100% Autonomous Multi-Pool Jackpot dApp 🚀
 
-A tactile, high-stakes, time-based lottery application built on Ethereum. Users purchase tickets for **0.01 ETH**, a 2-hour live countdown runs, and when the timer hits zero, a winner is selected on-chain to receive **70% of the jackpot pool**, **20% is rewarded to their referrer**, and **10% is allocated as the protocol house fee**. 💰
+**ETH Lottery** is a 100% autonomous, trustless Web3 dApp built with Next.js, Tailwind CSS, and Solidity. Featuring a tactile cyberpunk "ticket-stub" interface, players buy 0.01 ETH tickets across **4 multi-tier pools** (1-Min Flash, 1-Hour Express, 6-Hour Standard, 1-Week Mega) to compete for an automated **70% winner jackpot**, **20% referrer reward** (or **20% jackpot rollover** if unreferred), and **10% house fee** when the round timer expires. 💰
 
 ---
 
@@ -8,21 +8,23 @@ A tactile, high-stakes, time-based lottery application built on Ethereum. Users 
 
 **ETH Lottery** grounds abstract blockchain interactions in a familiar physical metaphor—the paper ticket. Designed with a **Tactile High-Contrast Cyberpunk** aesthetic, the dApp features cut-out ticket stubs, perforated dividers, decorative barcode strips, and high-impact typography. 🎨
 
-The entire lottery lifecycle is **100% decentralized and trustless**. All funds, player entries, referral mappings, automatic round rollovers, countdown timers, and 70/20/10 payout splits are enforced by a Solidity smart contract deployed on the Ethereum blockchain. ⚡
+The entire lottery lifecycle is **100% autonomous and trustless**. Zero owner privileges or admin intervention required. All funds, player entries, referral mappings, automatic round rollovers, countdown timers, 70/20/10 payout splits, and unreferred 20% jackpot rollovers are enforced by Solidity smart contracts deployed on the Ethereum blockchain. ⚡
 
 ---
 
 ## ✨ Key Features ⚡
 
-- 🎟️ **Ticket Purchase:** Buy tickets for 0.01 ETH each to enter the active draw round.
+- 🎟️ **4 Multi-Tier Pools:** Choose between ⚡ **1-Min Flash**, ⏱️ **1-Hour Express**, 🔥 **6-Hour Standard**, and 💎 **1-Week Mega** pools running simultaneously.
+- 💵 **USD Primary Currency Display:** Primary hero numbers, ticket prices, and history payouts are displayed in USD with real-time ETH/USD CoinGecko price integration and subtext ETH values.
 - 🤝 **Referral System (20% Reward):** Share referral links (`/?ref=YOUR_WALLET`). When your referee wins, 20% of the gross jackpot is automatically sent to your referrer wallet on-chain!
-- 💰 **70/20/10 Prize Split:** Jackpot pool is distributed 70% to Winner, 20% to Referrer, and 10% to Protocol Owner (if no referrer exists, winner receives 90%).
-- 🔄 **Zero-Signature Auto-Rollover:** If a buyer enters an expired round, the contract automatically clears previous players and starts a new 2-hour round seamlessly without requiring admin signatures.
-- ⏱️ **2-Hour Round Timer (HH:MM:SS):** Real-time countdown timer in `HH:MM:SS` format tracking time remaining.
-- 📜 **On-Chain Audit Log (History):** View historical draw results, winner addresses, referrer details, and payouts fetched directly from smart contract event logs.
-- 📋 **Terms & Conditions Page (`/terms`):** Detailed breakdown of prize distribution, referral mechanisms, auto-rollover, and protocol governance.
-- 📖 **Interactive Rules Page (`/rules`):** Built-in protocol guide explaining ticket prices, draw mechanics, and transparency.
-- 🔌 **Web3 Wallet Bridge:** Connect/disconnect MetaMask or Rabby wallets with real-time account detection and status feedback.
+- 🔄 **20% Unreferred Jackpot Rollover:** If a winner has no referrer, the 20% referral fee automatically rolls over into the smart contract balance for the next round's jackpot!
+- 💰 **70/20/10 Prize Split:** Jackpot pool is distributed 70% to Winner, 20% to Referrer/Rollover, and 10% to Protocol Owner.
+- 🤖 **100% Autonomous & Permissionless:** Anyone can trigger a winner draw when the timer expires. Buying a ticket in an expired round automatically executes the draw or restarts the round.
+- 💳 **USD / Credit Card Payment Option:** In addition to Web3 wallets (MetaMask/Rabby), users can pay via card simulation.
+- 📜 **On-Chain Audit Log (History):** View historical draw results with pool filter tabs (All Pools, Flash, Express, Standard, Mega) fetched directly from smart contract event logs.
+- 📋 **Terms & Conditions Page (`/terms`):** Detailed breakdown of multi-pool tiers, prize distribution, referral mechanisms, auto-rollover, and protocol governance.
+- 📖 **Interactive Rules Page (`/rules`):** Built-in protocol guide explaining ticket prices, draw mechanics, and provable transparency.
+- 🔌 **Web3 Wallet Bridge:** Connect/disconnect MetaMask or Rabby wallets with real-time account detection and network status feedback.
 
 ---
 

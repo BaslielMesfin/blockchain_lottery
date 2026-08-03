@@ -3,8 +3,8 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ETH LOTTERY — Decentralized Jackpot dApp",
-  description: "Tactile, high-stakes time-based lottery on Ethereum. Buy tickets, track live draws, and claim on-chain jackpots.",
+  title: "ETH LOTTERY — Autonomous Multi-Pool Web3 Jackpot dApp",
+  description: "100% autonomous, trustless time-based lottery on Ethereum. Play 4 multi-tier pools (1-Min Flash, 1-Hour Express, 6-Hour Standard, 1-Week Mega) with 0.01 ETH tickets, 70/20/10 payouts, and automatic jackpot rollovers.",
 };
 
 export default function RootLayout({
