@@ -176,7 +176,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const getReadProvider = useCallback(() => {
     if (!readProviderRef.current) {
-      readProviderRef.current = new JsonRpcProvider("http://127.0.0.1:8545");
+      const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://ethereum-sepolia.publicnode.com";
+      readProviderRef.current = new JsonRpcProvider(rpcUrl);
     }
     return readProviderRef.current;
   }, []);
@@ -313,16 +314,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /* ── Network Switch Helper ───────────────────────── */
-  const ensureLocalhostNetwork = useCallback(async () => {
+  const ensureNetwork = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) return;
+    const SEPOLIA_CHAIN_ID_HEX = "0xaa36a7"; // 11155111
     const HARDHAT_CHAIN_ID_HEX = "0x7a69"; // 31337
+
     try {
       const currentChainId = await window.ethereum.request({ method: "eth_chainId" });
-      if (currentChainId !== HARDHAT_CHAIN_ID_HEX) {
+      if (currentChainId !== SEPOLIA_CHAIN_ID_HEX && currentChainId !== HARDHAT_CHAIN_ID_HEX) {
         try {
           await window.ethereum.request({
             method: "wallet_switchEthereumChain",
-            params: [{ chainId: HARDHAT_CHAIN_ID_HEX }],
+            params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
           });
         } catch (switchError: any) {
           if (switchError.code === 4902 || switchError.message?.includes("Unrecognized chain")) {
@@ -330,9 +333,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
               method: "wallet_addEthereumChain",
               params: [
                 {
-                  chainId: HARDHAT_CHAIN_ID_HEX,
-                  chainName: "Hardhat Localhost",
-                  rpcUrls: ["http://127.0.0.1:8545"],
+                  chainId: SEPOLIA_CHAIN_ID_HEX,
+                  chainName: "Ethereum Sepolia Testnet",
+                  rpcUrls: ["https://ethereum-sepolia.publicnode.com"],
+                  blockExplorerUrls: ["https://sepolia.etherscan.io"],
                   nativeCurrency: {
                     name: "ETH",
                     symbol: "ETH",
@@ -358,7 +362,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
     setIsConnecting(true);
     try {
-      await ensureLocalhostNetwork();
+      await ensureNetwork();
       const accounts = (await window.ethereum.request({
         method: "eth_requestAccounts",
       })) as string[];
@@ -373,7 +377,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsConnecting(false);
     }
-  }, [ensureLocalhostNetwork]);
+  }, [ensureNetwork]);
 
   /* ── Disconnect Wallet ───────────────────────────── */
   const disconnectWallet = useCallback(() => {
@@ -389,7 +393,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setIsBuying(true);
     setTxStatus("Sending transaction…");
     try {
-      await ensureLocalhostNetwork();
+      await ensureNetwork();
       const contract = await getWriteContract();
       if (!contract) throw new Error("No contract");
 
@@ -416,7 +420,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setIsBuying(false);
       setTimeout(() => setTxStatus(null), 5000);
     }
-  }, [getWriteContract, fetchContractData, referrerAddress, ensureLocalhostNetwork, activePoolConfig]);
+  }, [getWriteContract, fetchContractData, referrerAddress, ensureNetwork, activePoolConfig]);
 
   /* ── Pick Winner (active pool) ──────────────────── */
   const pickWinner = useCallback(async () => {
