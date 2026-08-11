@@ -3,6 +3,7 @@
 import { Header } from "@/app/components/Header";
 import { MobileNav } from "@/app/components/MobileNav";
 import { Toast } from "@/app/components/Toast";
+import Link from "next/link";
 
 export default function TermsPage() {
   const termsSections = [
@@ -17,10 +18,10 @@ export default function TermsPage() {
           </p>
           <ul className="list-disc list-inside flex flex-col gap-1.5 font-label-mono text-xs text-primary">
             <li>
-              <strong className="text-secondary-fixed">70% Winner Payout:</strong> Allocated directly to the winning wallet address.
+              <strong className="text-secondary-fixed">70% Winner Payout:</strong> Added to the winner&apos;s on-chain claim balance for withdrawal to a chosen address.
             </li>
             <li>
-              <strong className="text-secondary-fixed">20% Referrer Reward / Rollover:</strong> Transferred automatically to the registered referrer wallet of the winner. If the winner has no registered referrer, this 20% automatically rolls over into the contract jackpot for the next round!
+              <strong className="text-secondary-fixed">20% Referrer Reward / Rollover:</strong> Added to the registered referrer&apos;s on-chain claim balance. If the winner has no referrer, the share rolls into the next round.
             </li>
             <li>
               <strong className="text-secondary-fixed">10% Protocol House Fee:</strong> Allocated to the contract owner to cover protocol maintenance, hosting, and gas infrastructure.
@@ -46,7 +47,7 @@ export default function TermsPage() {
               When a user lands via your referral link and buys a ticket, your wallet address is permanently mapped as their referrer inside the smart contract state.
             </li>
             <li>
-              Whenever a referee wins a round, the smart contract automatically sends 20% of the gross jackpot pool to your referrer wallet in the same transaction.
+              Whenever a referee wins, 20% of the gross pot is allocated to your pull-payment claim. You withdraw it in a separate transaction so payout failures cannot block future rounds.
             </li>
           </ul>
         </div>
@@ -92,13 +93,13 @@ export default function TermsPage() {
           </p>
           <ul className="list-disc list-inside flex flex-col gap-1.5 font-label-mono text-xs text-primary">
             <li>
-              Buyer entry is never blocked. The smart contract automatically detects the expiration timestamp upon the next ticket purchase.
+              Purchases close when the timer expires. Chainlink Automation or any permissionless caller requests VRF for the completed round before the next round opens.
             </li>
             <li>
               The contract clears previous round participants and initializes a new countdown immediately inside the buyer&apos;s transaction.
             </li>
             <li>
-              No owner signature or administrative intervention is required to restart active rounds.
+              No owner signature is required. VRF fulfillment opens the next round, and a stalled request can be retried after the public timeout.
             </li>
           </ul>
         </div>
@@ -111,7 +112,7 @@ export default function TermsPage() {
       content: (
         <div className="flex flex-col gap-3 text-sm text-on-surface-variant font-body-md">
           <p>
-            All ticket entries, countdown timers, random winner selections, and payout transfers are processed non-custodially on the Ethereum blockchain.
+            Ticket entries, timers, VRF request proofs, payout allocations, and claims are processed non-custodially on Ethereum. Recipients must withdraw allocated claims.
           </p>
           <p className="font-label-mono text-xs text-on-surface-variant/80">
             By interacting with this smart contract dApp, users acknowledge and accept that all transactions are final, non-refundable, and governed solely by deployed smart contract code.
@@ -130,7 +131,7 @@ export default function TermsPage() {
           {/* Header Section */}
           <div className="mb-10 text-center md:text-left">
             <span className="font-label-mono text-xs text-secondary-fixed uppercase tracking-widest block mb-2 font-bold">
-              // LEGAL & PROTOCOL TERMS
+              LEGAL & PROTOCOL TERMS
             </span>
             <h1 className="font-headline-lg text-4xl md:text-6xl text-primary uppercase tracking-tight">
               TERMS & CONDITIONS
@@ -175,12 +176,12 @@ export default function TermsPage() {
               </h4>
             </div>
 
-            <a
+            <Link
               href="/"
               className="bg-void-black text-ticket-white font-label-mono text-xs font-bold uppercase px-6 py-3 hover:bg-surface-container-high transition-colors whitespace-nowrap"
             >
               RETURN TO LOTTERY →
-            </a>
+            </Link>
           </div>
         </main>
       </div>

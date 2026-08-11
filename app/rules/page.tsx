@@ -3,6 +3,7 @@
 import { Header } from "@/app/components/Header";
 import { MobileNav } from "@/app/components/MobileNav";
 import { Toast } from "@/app/components/Toast";
+import Link from "next/link";
 
 export default function RulesPage() {
   const rules = [
@@ -21,7 +22,7 @@ export default function RulesPage() {
     {
       step: "03",
       title: "Winner Selection",
-      desc: "When the countdown hits 0, a winner is picked randomly using on-chain pseudo-randomness from the block header.",
+      desc: "When the countdown ends, Chainlink Automation requests a draw and VRF returns a verifiable random word. The winning ticket is randomWord modulo the exact ticket total.",
       icon: "casino",
     },
     {
@@ -41,7 +42,7 @@ export default function RulesPage() {
           {/* Header Section */}
           <div className="mb-10 text-center md:text-left">
             <span className="font-label-mono text-xs text-primary-container uppercase tracking-widest block mb-2 font-bold">
-              // HOW IT WORKS
+              HOW IT WORKS
             </span>
             <h1 className="font-headline-lg text-4xl md:text-6xl text-primary uppercase tracking-tight">
               LOTTERY RULES & PROTOCOL
@@ -99,16 +100,16 @@ export default function RulesPage() {
                   FULLY ON-CHAIN & AUTOMATED
                 </h4>
                 <p className="font-body-md text-xs md:text-sm text-void-black/80 max-w-2xl mt-1">
-                  All funds, ticket purchases, countdown timers, and payout distributions are handled by smart contracts. No human intervention can alter the draw outcome.
+                  Ticket ownership, timers, VRF proofs, payout allocations, and claims are recorded on Ethereum. Anyone can request an overdue draw or retry a timed-out VRF request.
                 </p>
               </div>
 
-              <a
+              <Link
                 href="/"
                 className="bg-void-black text-ticket-white font-label-mono text-xs font-bold uppercase px-6 py-3 hover:bg-surface-container-high transition-colors whitespace-nowrap"
               >
                 PLAY NOW →
-              </a>
+              </Link>
             </div>
           </div>
         </main>

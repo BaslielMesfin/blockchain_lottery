@@ -1,612 +1,632 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { BrowserProvider, Contract, JsonRpcProvider, formatEther, parseEther } from "ethers";
-import { POOLS, CONTRACT_ABI, type PoolConfig } from "@/constants/contract";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  BrowserProvider,
+  Contract,
+  JsonRpcProvider,
+  formatEther,
+  isAddress,
+  type Eip1193Provider,
+  type TransactionReceipt,
+  type TransactionResponse,
+} from "ethers";
+import { CONTRACT_ABI, NETWORK, POOLS, type PoolConfig } from "@/constants/contract";
 
-/* ─── Types ──────────────────────────────────────────── */
-interface EthereumProvider {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on: (event: string, handler: (...args: unknown[]) => void) => void;
-  removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+interface BrowserWallet extends Eip1193Provider {
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  disconnect?: () => Promise<void>;
 }
 
 declare global {
   interface Window {
-    ethereum?: EthereumProvider;
+    ethereum?: BrowserWallet;
   }
 }
 
 export interface DrawWinnerEvent {
+  roundId: number;
   winner: string;
+  winningTicket: number;
+  randomWord: string;
+  requestId: string;
   prizeAmount: string;
   houseFee: string;
+  grossPot: string;
   referrer?: string;
-  referrerReward?: string;
-  rolledOverAmount?: string;
+  referrerReward: string;
+  rolledOverAmount: string;
+  blockNumber: number;
+  proofVerified: boolean;
+}
+
+export interface UserTicketEvent {
+  roundId: number;
+  count: number;
+  firstTicket: number;
+  amount: string;
+  transactionHash: string;
   blockNumber: number;
 }
 
 export interface PoolState {
   timeRemaining: number;
   ticketPrice: string;
-  players: string[];
+  totalTickets: number;
+  userTickets: number;
+  roundId: number;
   recentWinner: string;
-  lotteryOpen: boolean;
+  recentWinningTicket: number;
+  lotteryState: "OPEN" | "CALCULATING";
+  currentPot: string;
   rolloverBalance: string;
+  claimable: string;
+  totalClaimable: string;
+  activeRequestId: string;
+  requestStartedAt: number;
+  vrfTimeout: number;
+  contractReady: boolean;
   pastWinners: DrawWinnerEvent[];
+  ticketHistory: UserTicketEvent[];
 }
 
-/* ── Human-Friendly Error Parser ────────────────────── */
-function formatUserFriendlyError(err: unknown): string {
-  console.error("[Web3 Technical Log]:", err);
-  const rawMsg = err instanceof Error ? err.message : String(err);
-  const lower = rawMsg.toLowerCase();
-
-  if (
-    lower.includes("user rejected") ||
-    lower.includes("action_rejected") ||
-    lower.includes("user denied") ||
-    lower.includes("rejected action")
-  ) {
-    return "Error: Transaction cancelled in wallet.";
-  }
-  if (lower.includes("insufficient funds")) {
-    return "Error: Insufficient ETH balance in your wallet to cover ticket & gas.";
-  }
-  if (lower.includes("nonce") || lower.includes("nonce_expired")) {
-    return "Error: Wallet nonce out of sync. Please reset transaction history in wallet settings.";
-  }
-  if (lower.includes("network") || lower.includes("cannot connect") || lower.includes("failed to fetch")) {
-    return "Error: Network connection issue. Please check if your network node is running.";
-  }
-  if (lower.includes("execution reverted") || lower.includes("call_exception")) {
-    return "Error: Transaction reverted by contract. Round status may have updated.";
-  }
-
-  return "Error: Transaction could not be completed. Please try again.";
-}
-
-function createEmptyPoolState(pool: PoolConfig): PoolState {
-  return {
-    timeRemaining: 0,
-    ticketPrice: pool.ticketPriceEth,
-    players: [],
-    recentWinner: "",
-    lotteryOpen: true,
-    rolloverBalance: "0",
-    pastWinners: [],
-  };
+export interface TransactionProgress {
+  state: "simulating" | "awaiting-signature" | "submitted" | "confirming" | "confirmed" | "replaced" | "failed";
+  label: string;
+  hash?: string;
+  replacementHash?: string;
+  confirmations: number;
+  estimatedGas?: string;
+  estimatedFeeEth?: string;
 }
 
 interface WalletContextType {
   mounted: boolean;
   account: string | null;
-  referrerAddress: string | null;
-  isConnecting: boolean;
   owner: string;
+  referrerAddress: string | null;
+  walletSource: "injected" | "walletconnect" | null;
+  chainOk: boolean;
+  rpcHealthy: boolean;
+  isConnecting: boolean;
   isBuying: boolean;
   isPicking: boolean;
   isRestarting: boolean;
   txStatus: string | null;
+  txProgress: TransactionProgress | null;
   ethUsdPrice: number;
-
-  /* Multi-pool */
+  ethPriceUpdatedAt: number | null;
   activePoolId: string;
   setActivePoolId: (id: string) => void;
   pools: PoolConfig[];
   poolStates: Record<string, PoolState>;
   activePool: PoolState;
   activePoolConfig: PoolConfig;
-
-  /* Actions (operate on active pool) */
-  buyTicketWithUsd: (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => Promise<void>;
   connectWallet: () => Promise<void>;
-  disconnectWallet: () => void;
+  connectMobileWallet: () => Promise<void>;
+  disconnectWallet: () => Promise<void>;
   buyTicket: (customReferrer?: string, count?: number) => Promise<void>;
   pickWinner: () => Promise<void>;
-  restartLottery: () => Promise<void>;
+  retryRandomness: () => Promise<void>;
+  withdrawClaim: () => Promise<void>;
   fetchPastWinners: () => Promise<void>;
   fetchContractData: () => Promise<void>;
 }
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const DEFAULT_POOL_ID = "standard";
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-const DEFAULT_POOL_ID = "standard"; // Default to 6-hour Standard pool
+function subscribeHydration() {
+  return () => undefined;
+}
+
+function emptyPool(pool: PoolConfig): PoolState {
+  return {
+    timeRemaining: 0,
+    ticketPrice: pool.ticketPriceEth,
+    totalTickets: 0,
+    userTickets: 0,
+    roundId: 1,
+    recentWinner: ZERO_ADDRESS,
+    recentWinningTicket: 0,
+    lotteryState: "OPEN",
+    currentPot: "0",
+    rolloverBalance: "0",
+    claimable: "0",
+    totalClaimable: "0",
+    activeRequestId: "0",
+    requestStartedAt: 0,
+    vrfTimeout: 0,
+    contractReady: false,
+    pastWinners: [],
+    ticketHistory: [],
+  };
+}
+
+function friendlyError(error: unknown): string {
+  console.error("[wallet]", error);
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  if (message.includes("user rejected") || message.includes("action_rejected")) return "Transaction cancelled in wallet.";
+  if (message.includes("insufficient funds")) return "Insufficient ETH for the tickets and gas.";
+  if (message.includes("roundexpired")) return "This round has ended. Automation is requesting the draw.";
+  if (message.includes("wrong network")) return `Switch your wallet to ${NETWORK.name}.`;
+  if (message.includes("no contract bytecode")) return "The configured lottery is not deployed on this network.";
+  if (message.includes("transaction replaced")) return "The wallet replaced this transaction.";
+  return "The transaction could not be completed. Check the wallet details and try again.";
+}
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-
-  /* ── Wallet state ────────────────────────────────── */
+  const mounted = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const [account, setAccount] = useState<string | null>(null);
-  const [referrerAddress, setReferrerAddress] = useState<string | null>(null);
+  const [owner, setOwner] = useState("");
+  const [walletSource, setWalletSource] = useState<"injected" | "walletconnect" | null>(null);
+  const [chainOk, setChainOk] = useState(false);
+  const [rpcHealthy, setRpcHealthy] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
-
-  /* ── Shared contract state ──────────────────────── */
-  const [owner, setOwner] = useState<string>("");
-
-  /* ── Multi-pool state ──────────────────────────── */
-  const [activePoolId, setActivePoolId] = useState<string>(DEFAULT_POOL_ID);
-  const [poolStates, setPoolStates] = useState<Record<string, PoolState>>(() => {
-    const initial: Record<string, PoolState> = {};
-    for (const pool of POOLS) {
-      initial[pool.id] = createEmptyPoolState(pool);
-    }
-    return initial;
-  });
-
-  /* ── TX state ────────────────────────────────────── */
   const [isBuying, setIsBuying] = useState(false);
   const [isPicking, setIsPicking] = useState(false);
-  const [isRestarting, setIsRestarting] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
-  const [ethUsdPrice, setEthUsdPrice] = useState<number>(3500);
+  const [txProgress, setTxProgress] = useState<TransactionProgress | null>(null);
+  const [ethUsdPrice, setEthUsdPrice] = useState(0);
+  const [ethPriceUpdatedAt, setEthPriceUpdatedAt] = useState<number | null>(null);
+  const [activePoolId, setActivePoolId] = useState(DEFAULT_POOL_ID);
+  const [poolStates, setPoolStates] = useState<Record<string, PoolState>>(() =>
+    Object.fromEntries(POOLS.map((pool) => [pool.id, emptyPool(pool)])),
+  );
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const providerRef = useRef<BrowserProvider | null>(null);
-  const readProviderRef = useRef<JsonRpcProvider | BrowserProvider | null>(null);
+  const referrerAddress = useMemo(() => {
+    if (!mounted) return null;
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    return ref && isAddress(ref) ? ref.toLowerCase() : null;
+  }, [mounted]);
 
-  /* Per-pool refs */
+  const browserProviderRef = useRef<BrowserProvider | null>(null);
+  const walletProviderRef = useRef<BrowserWallet | null>(null);
+  const walletConnectRef = useRef<BrowserWallet | null>(null);
+  const readProviderRef = useRef<JsonRpcProvider | null>(null);
   const readContractsRef = useRef<Map<string, Contract>>(new Map());
-  const lotteryEndTimesRef = useRef<Map<string, number>>(new Map());
+  const endTimesRef = useRef<Map<string, number>>(new Map());
 
-  /* Derived state */
-  const activePoolConfig = POOLS.find((p) => p.id === activePoolId) || POOLS[2];
-  const activePool = poolStates[activePoolId] || createEmptyPoolState(activePoolConfig);
-
-  useEffect(() => {
-    setMounted(true);
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const ref = params.get("ref");
-      if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
-        setReferrerAddress(ref.toLowerCase());
-      }
-    }
-  }, []);
-
-  /* ── Provider & Contract Getters ─────────────────── */
-  const getProvider = useCallback(() => {
-    if (typeof window === "undefined" || !window.ethereum) return null;
-    if (!providerRef.current) {
-      providerRef.current = new BrowserProvider(window.ethereum);
-    }
-    return providerRef.current;
-  }, []);
+  const activePoolConfig = POOLS.find((pool) => pool.id === activePoolId) ?? POOLS[2];
+  const activePool = poolStates[activePoolId] ?? emptyPool(activePoolConfig);
 
   const getReadProvider = useCallback(() => {
     if (!readProviderRef.current) {
-      const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://ethereum-sepolia.publicnode.com";
-      readProviderRef.current = new JsonRpcProvider(rpcUrl);
+      readProviderRef.current = new JsonRpcProvider(NETWORK.rpcUrl, NETWORK.chainId, { staticNetwork: true });
+      readProviderRef.current.pollingInterval = 6_000;
     }
     return readProviderRef.current;
   }, []);
 
-  const getReadContract = useCallback((poolId: string) => {
-    const existing = readContractsRef.current.get(poolId);
-    if (existing) return existing;
-
-    const pool = POOLS.find((p) => p.id === poolId);
-    if (!pool) return null;
-
-    const provider = getReadProvider();
-    const contract = new Contract(pool.address, CONTRACT_ABI, provider);
-    readContractsRef.current.set(poolId, contract);
+  const getReadContract = useCallback((pool: PoolConfig) => {
+    const cached = readContractsRef.current.get(pool.id);
+    if (cached) return cached;
+    const contract = new Contract(pool.address, CONTRACT_ABI, getReadProvider());
+    readContractsRef.current.set(pool.id, contract);
     return contract;
   }, [getReadProvider]);
 
-  const getWriteContract = useCallback(async (poolId?: string) => {
-    const provider = getProvider();
-    if (!provider) return null;
-    const targetPool = POOLS.find((p) => p.id === (poolId || activePoolId));
-    if (!targetPool) return null;
-    const signer = await provider.getSigner();
-    return new Contract(targetPool.address, CONTRACT_ABI, signer);
-  }, [getProvider, activePoolId]);
+  const configureWallet = useCallback(async (source: BrowserWallet, kind: "injected" | "walletconnect") => {
+    const provider = new BrowserProvider(source);
+    const accounts = await provider.send("eth_requestAccounts", []);
+    const network = await provider.getNetwork();
+    walletProviderRef.current = source;
+    browserProviderRef.current = provider;
+    setAccount(accounts[0]?.toLowerCase() ?? null);
+    setWalletSource(kind);
+    setChainOk(Number(network.chainId) === NETWORK.chainId);
+  }, []);
 
-  /* ── Fetch Contract Data (all pools) ────────────── */
+  const ensureNetwork = useCallback(async () => {
+    const source = walletProviderRef.current ?? window.ethereum;
+    if (!source) throw new Error("No wallet provider");
+    const current = await source.request({ method: "eth_chainId" });
+    if (String(current).toLowerCase() === NETWORK.chainIdHex.toLowerCase()) {
+      setChainOk(true);
+      return;
+    }
+    try {
+      await source.request({ method: "wallet_switchEthereumChain", params: [{ chainId: NETWORK.chainIdHex }] });
+    } catch (error) {
+      if (NETWORK.chainId !== 31337) {
+        await source.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: NETWORK.chainIdHex,
+            chainName: NETWORK.name,
+            rpcUrls: [NETWORK.rpcUrl],
+            blockExplorerUrls: NETWORK.explorerUrl ? [NETWORK.explorerUrl] : [],
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          }],
+        });
+      } else {
+        throw error;
+      }
+    }
+    const after = await source.request({ method: "eth_chainId" });
+    if (String(after).toLowerCase() !== NETWORK.chainIdHex.toLowerCase()) throw new Error("Wrong network");
+    setChainOk(true);
+  }, []);
+
+  const getWriteContract = useCallback(async () => {
+    await ensureNetwork();
+    const provider = browserProviderRef.current;
+    if (!provider) throw new Error("Connect a wallet first");
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== NETWORK.chainId) throw new Error("Wrong network");
+    const code = await provider.getCode(activePoolConfig.address);
+    if (code === "0x") throw new Error("No contract bytecode at configured address");
+    return new Contract(activePoolConfig.address, CONTRACT_ABI, await provider.getSigner());
+  }, [activePoolConfig.address, ensureNetwork]);
+
   const fetchContractData = useCallback(async () => {
     const provider = getReadProvider();
-
-    for (const pool of POOLS) {
-      const contract = getReadContract(pool.id);
-      if (!contract) continue;
-
-      try {
-        const code = await provider.getCode(pool.address);
-        if (!code || code === "0x" || code === "0x0") continue;
-
-        const [price, playerList, winner, contractOwner, isOpen, endTime, rollover] =
-          await Promise.all([
-            contract.ticketPrice(),
-            contract.getPlayers(),
-            contract.recentWinner(),
-            contract.owner(),
-            contract.lotteryOpen(),
-            contract.lotteryEndTime(),
-            contract.rolloverBalance(),
-          ]);
-
-        // Set owner from any pool (they all share the same deployer)
-        setOwner((contractOwner as string).toLowerCase());
-
-        lotteryEndTimesRef.current.set(pool.id, Number(endTime));
-
-        setPoolStates((prev) => ({
-          ...prev,
-          [pool.id]: {
-            ...prev[pool.id],
-            ticketPrice: formatEther(price),
-            players: playerList as string[],
-            recentWinner: winner as string,
-            lotteryOpen: isOpen as boolean,
-            rolloverBalance: formatEther(rollover),
-          },
-        }));
-      } catch (err) {
-        console.error(`Failed to fetch data for pool ${pool.id}:`, err);
-      }
-    }
-  }, [getReadContract, getReadProvider]);
-
-  /* ── Fetch Past Winners Events (active pool) ────── */
-  const fetchPastWinners = useCallback(async () => {
-    for (const pool of POOLS) {
-      const contract = getReadContract(pool.id);
-      if (!contract) continue;
-
-      try {
-        const provider = getReadProvider();
-        const code = await provider.getCode(pool.address);
-        if (!code || code === "0x" || code === "0x0") continue;
-
-        const filter = contract.filters.WinnerPicked();
-        const events = await contract.queryFilter(filter, 0, "latest");
-
-        const formatted: DrawWinnerEvent[] = events.map((evt) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const args = (evt as any).args;
-          return {
-            winner: args[0] as string,
-            prizeAmount: formatEther(args[1]),
-            houseFee: formatEther(args[2]),
-            referrer: args[3] ? (args[3] as string) : undefined,
-            referrerReward: args[4] ? formatEther(args[4]) : "0",
-            rolledOverAmount: args[5] ? formatEther(args[5]) : "0",
-            blockNumber: evt.blockNumber,
-          };
-        }).reverse();
-
-        setPoolStates((prev) => ({
-          ...prev,
-          [pool.id]: {
-            ...prev[pool.id],
-            pastWinners: formatted,
-          },
-        }));
-      } catch (err) {
-        console.error(`Failed to fetch past winners for pool ${pool.id}:`, err);
-      }
-    }
-  }, [getReadContract, getReadProvider]);
-
-  /* ── Countdown Poller (all pools) ───────────────── */
-  const startCountdownPoller = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const tick = () => {
-      const nowSeconds = Math.floor(Date.now() / 1000);
-
-      setPoolStates((prev) => {
-        const next = { ...prev };
-        for (const pool of POOLS) {
-          const endTime = lotteryEndTimesRef.current.get(pool.id) || 0;
-          if (endTime === 0) continue;
-          const remaining = Math.max(0, endTime - nowSeconds);
-          next[pool.id] = { ...next[pool.id], timeRemaining: remaining };
-        }
-        return next;
-      });
-    };
-
-    tick();
-    timerRef.current = setInterval(tick, 1000);
-  }, []);
-
-  /* ── Network Switch Helper ───────────────────────── */
-  const ensureNetwork = useCallback(async () => {
-    if (typeof window === "undefined" || !window.ethereum) return;
-    const SEPOLIA_CHAIN_ID_HEX = "0xaa36a7"; // 11155111
-    const HARDHAT_CHAIN_ID_HEX = "0x7a69"; // 31337
-
     try {
-      const currentChainId = await window.ethereum.request({ method: "eth_chainId" });
-      if (currentChainId !== SEPOLIA_CHAIN_ID_HEX && currentChainId !== HARDHAT_CHAIN_ID_HEX) {
-        try {
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
-          });
-        } catch (switchError: any) {
-          if (switchError.code === 4902 || switchError.message?.includes("Unrecognized chain")) {
-            await window.ethereum.request({
-              method: "wallet_addEthereumChain",
-              params: [
-                {
-                  chainId: SEPOLIA_CHAIN_ID_HEX,
-                  chainName: "Ethereum Sepolia Testnet",
-                  rpcUrls: ["https://ethereum-sepolia.publicnode.com"],
-                  blockExplorerUrls: ["https://sepolia.etherscan.io"],
-                  nativeCurrency: {
-                    name: "ETH",
-                    symbol: "ETH",
-                    decimals: 18,
-                  },
-                },
-              ],
-            });
-          }
+      await provider.getBlockNumber();
+      setRpcHealthy(true);
+    } catch (error) {
+      console.error("RPC health check failed", error);
+      setRpcHealthy(false);
+      return;
+    }
+
+    await Promise.all(POOLS.map(async (pool) => {
+      const contract = getReadContract(pool);
+      try {
+        const code = await provider.getCode(pool.address);
+        if (code === "0x") {
+          setPoolStates((previous) => ({
+            ...previous,
+            [pool.id]: { ...previous[pool.id], contractReady: false },
+          }));
+          return;
         }
+        const values = await Promise.all([
+          contract.ticketPrice(),
+          contract.totalTickets(),
+          contract.roundId(),
+          contract.recentWinner(),
+          contract.recentWinningTicket(),
+          contract.lotteryState(),
+          contract.currentPot(),
+          contract.rolloverBalance(),
+          contract.activeRequestId(),
+          contract.requestStartedAt(),
+          contract.vrfTimeout(),
+          contract.totalClaimable(),
+          contract.lotteryEndTime(),
+          contract.owner(),
+          account ? contract.ticketsByRound(await contract.roundId(), account) : 0n,
+          account ? contract.claimableWinnings(account) : 0n,
+        ]);
+        const endTime = Number(values[12]);
+        endTimesRef.current.set(pool.id, endTime);
+        setOwner(String(values[13]).toLowerCase());
+        setPoolStates((previous) => ({
+          ...previous,
+          [pool.id]: {
+            ...previous[pool.id],
+            ticketPrice: formatEther(values[0]),
+            totalTickets: Number(values[1]),
+            roundId: Number(values[2]),
+            recentWinner: String(values[3]),
+            recentWinningTicket: Number(values[4]),
+            lotteryState: Number(values[5]) === 0 ? "OPEN" : "CALCULATING",
+            currentPot: formatEther(values[6]),
+            rolloverBalance: formatEther(values[7]),
+            activeRequestId: values[8].toString(),
+            requestStartedAt: Number(values[9]),
+            vrfTimeout: Number(values[10]),
+            totalClaimable: formatEther(values[11]),
+            userTickets: Number(values[14]),
+            claimable: formatEther(values[15]),
+            contractReady: true,
+          },
+        }));
+      } catch (error) {
+        console.error(`Failed to read ${pool.id}`, error);
       }
-    } catch {
-      /* silent */
+    }));
+  }, [account, getReadContract, getReadProvider]);
+
+  const fetchPastWinners = useCallback(async () => {
+    await Promise.all(POOLS.map(async (pool) => {
+      try {
+        const query = new URLSearchParams({ pool: pool.id });
+        if (account) query.set("account", account);
+        const response = await fetch(`/api/indexer?${query.toString()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Indexer HTTP ${response.status}`);
+        const indexed = await response.json() as { winners: DrawWinnerEvent[]; tickets: UserTicketEvent[] };
+
+        setPoolStates((previous) => ({
+          ...previous,
+          [pool.id]: { ...previous[pool.id], pastWinners: indexed.winners, ticketHistory: indexed.tickets },
+        }));
+      } catch (error) {
+        console.error(`Failed to index ${pool.id} events`, error);
+      }
+    }));
+  }, [account]);
+
+  const fetchEthPrice = useCallback(async () => {
+    try {
+      const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
+      if (!response.ok) throw new Error(`Price HTTP ${response.status}`);
+      const data = (await response.json()) as { ethereum?: { usd?: number } };
+      if (!data.ethereum?.usd) throw new Error("Missing ETH quote");
+      setEthUsdPrice(data.ethereum.usd);
+      setEthPriceUpdatedAt(Date.now());
+    } catch (error) {
+      console.error("ETH/USD quote unavailable", error);
     }
   }, []);
 
-  /* ── Connect Wallet ──────────────────────────────── */
   const connectWallet = useCallback(async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
-      setTxStatus("Error: Please install MetaMask or Rabby to use this dApp.");
-      setTimeout(() => setTxStatus(null), 5000);
+    if (!window.ethereum) {
+      setTxStatus("Install MetaMask, Rabby, or another browser wallet.");
       return;
     }
     setIsConnecting(true);
     try {
+      await configureWallet(window.ethereum, "injected");
       await ensureNetwork();
-      const accounts = (await window.ethereum.request({
-        method: "eth_requestAccounts",
-      })) as string[];
-      if (accounts.length > 0) {
-        setAccount(accounts[0].toLowerCase());
-        setTxStatus("Wallet connected successfully!");
-        setTimeout(() => setTxStatus(null), 3000);
-      }
-    } catch (err: unknown) {
-      setTxStatus(formatUserFriendlyError(err));
-      setTimeout(() => setTxStatus(null), 5000);
+      setTxStatus("Wallet connected.");
+    } catch (error) {
+      setTxStatus(friendlyError(error));
     } finally {
       setIsConnecting(false);
     }
-  }, [ensureNetwork]);
+  }, [configureWallet, ensureNetwork]);
 
-  /* ── Disconnect Wallet ───────────────────────────── */
-  const disconnectWallet = useCallback(() => {
-    setAccount(null);
-    providerRef.current = null;
-    readContractsRef.current.clear();
-    setTxStatus("Wallet disconnected.");
-    setTimeout(() => setTxStatus(null), 3000);
-  }, []);
-
-  /* ── Buy Ticket (active pool) ───────────────────── */
-  const buyTicket = useCallback(async (customReferrer?: string, count: number = 1) => {
-    setIsBuying(true);
-    setTxStatus("Sending transaction…");
-    try {
-      await ensureNetwork();
-      const contract = await getWriteContract();
-      if (!contract) throw new Error("No contract");
-
-      const targetRef = customReferrer || referrerAddress || "0x0000000000000000000000000000000000000000";
-      const unitPriceWei = parseEther(activePoolConfig.ticketPriceEth);
-      const totalWei = unitPriceWei * BigInt(count);
-
-      let tx;
-      if (typeof contract.buyTicketsWithReferrer === "function") {
-        tx = await contract.buyTicketsWithReferrer(count, targetRef, { value: totalWei });
-      } else if (typeof contract.buyTicketWithReferrer === "function") {
-        tx = await contract.buyTicketWithReferrer(targetRef, { value: totalWei });
-      } else {
-        tx = await contract.buyTicket({ value: totalWei });
-      }
-
-      setTxStatus("Mining… please wait");
-      await tx.wait();
-      setTxStatus(`${count > 1 ? `${count} Tickets` : "Ticket"} purchased! 🎉`);
-      await fetchContractData();
-    } catch (err: unknown) {
-      setTxStatus(formatUserFriendlyError(err));
-    } finally {
-      setIsBuying(false);
-      setTimeout(() => setTxStatus(null), 5000);
-    }
-  }, [getWriteContract, fetchContractData, referrerAddress, ensureNetwork, activePoolConfig]);
-
-  /* ── Pick Winner (active pool) ──────────────────── */
-  const pickWinner = useCallback(async () => {
-    setIsPicking(true);
-    setTxStatus("Picking winner…");
-    try {
-      const contract = await getWriteContract();
-      if (!contract) throw new Error("No contract");
-
-      const tx = await contract.pickWinner();
-      setTxStatus("Mining… please wait");
-      await tx.wait();
-      setTxStatus("Winner picked! 🏆");
-      await fetchContractData();
-      await fetchPastWinners();
-    } catch (err: unknown) {
-      setTxStatus(formatUserFriendlyError(err));
-    } finally {
-      setIsPicking(false);
-      setTimeout(() => setTxStatus(null), 5000);
-    }
-  }, [getWriteContract, fetchContractData, fetchPastWinners]);
-
-  /* ── Restart Lottery (active pool) ──────────────── */
-  const restartLottery = useCallback(async () => {
-    setIsRestarting(true);
-    setTxStatus("Restarting lottery…");
-    try {
-      const contract = await getWriteContract();
-      if (!contract) throw new Error("No contract");
-
-      const tx = await contract.restartLottery();
-      setTxStatus("Mining… please wait");
-      await tx.wait();
-      setTxStatus("Lottery restarted! 🎉");
-      await fetchContractData();
-    } catch (err: unknown) {
-      setTxStatus(formatUserFriendlyError(err));
-    } finally {
-      setIsRestarting(false);
-      setTimeout(() => setTxStatus(null), 5000);
-    }
-  }, [getWriteContract, fetchContractData]);
-  
-  /* ── Fetch ETH Price ─────────────────────────────── */
-  const fetchEthPrice = useCallback(async () => {
-    try {
-      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
-      const data = await res.json();
-      if (data && data.ethereum && data.ethereum.usd) {
-        setEthUsdPrice(Number(data.ethereum.usd));
-      }
-    } catch (err) {
-      console.error("Failed to fetch ETH price from CoinGecko, using fallback:", err);
-      setEthUsdPrice(3500);
-    }
-  }, []);
-
-  /* ── Buy Ticket with USD ─────────────────────────── */
-  const buyTicketWithUsd = useCallback(async (cardInfo: { cardNumber: string; expiry: string; cvc: string; name: string }) => {
-    setIsBuying(true);
-    setTxStatus("Authorizing Card...");
-    
-    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-    
-    try {
-      await delay(1200);
-      setTxStatus("Processing USD Payment...");
-      await delay(1200);
-      setTxStatus("Issuing Ticket...");
-      await delay(1200);
-      
-      const buyerAddress = account || "0xusd" + Math.random().toString(16).substring(2, 10).padStart(37, "0");
-      setPoolStates((prev) => ({
-        ...prev,
-        [activePoolId]: {
-          ...prev[activePoolId],
-          players: [...prev[activePoolId].players, buyerAddress],
-        },
-      }));
-      
-      setTxStatus("Ticket purchased with USD! 🎉");
-    } catch (err: unknown) {
-      setTxStatus("Error: Card authorization failed.");
-    } finally {
-      setIsBuying(false);
-      setTimeout(() => setTxStatus(null), 4000);
-    }
-  }, [account, activePoolId]);
-
-  /* ── Effects ─────────────────────────────────────── */
-  useEffect(() => {
-    if (!mounted || typeof window === "undefined" || !window.ethereum) return;
-
-    (async () => {
-      try {
-        const accounts = (await window.ethereum.request({
-          method: "eth_accounts",
-        })) as string[];
-        if (accounts.length > 0) setAccount(accounts[0].toLowerCase());
-      } catch {
-        /* silent */
-      }
-    })();
-
-    const handleAccountsChanged = (...args: unknown[]) => {
-      const accs = args[0] as string[];
-      providerRef.current = null;
-      readContractsRef.current.clear();
-      setAccount(accs.length > 0 ? accs[0].toLowerCase() : null);
-    };
-
-    window.ethereum.on("accountsChanged", handleAccountsChanged);
-    return () => {
-      window.ethereum?.removeListener("accountsChanged", handleAccountsChanged);
-    };
-  }, [mounted]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    fetchContractData();
-    fetchPastWinners();
-    startCountdownPoller();
-    fetchEthPrice();
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [mounted, fetchContractData, fetchPastWinners, startCountdownPoller, fetchEthPrice]);
-
-  /* ── Auto-pick winner effect (active pool) ──────── */
-  const autoPickTriggeredRef = useRef<Set<string>>(new Set());
-  const isOwner = account !== null && owner !== "" && account === owner;
-
-  useEffect(() => {
-    const pool = poolStates[activePoolId];
-    if (!pool) return;
-
-    if (pool.timeRemaining > 0) {
-      autoPickTriggeredRef.current.delete(activePoolId);
+  const connectMobileWallet = useCallback(async () => {
+    const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
+    if (!projectId) {
+      setTxStatus("WalletConnect needs NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID before it can be enabled.");
       return;
     }
-
-    if (
-      pool.timeRemaining === 0 &&
-      isOwner &&
-      pool.players.length > 0 &&
-      !isPicking &&
-      !autoPickTriggeredRef.current.has(activePoolId)
-    ) {
-      autoPickTriggeredRef.current.add(activePoolId);
-      pickWinner();
+    setIsConnecting(true);
+    try {
+      const loadModule = new Function("name", "return import(name)") as (name: string) => Promise<{ default: { init: (options: unknown) => Promise<BrowserWallet> } }>;
+      const walletConnectModule = await loadModule("@walletconnect/ethereum-provider");
+      const provider = await walletConnectModule.default.init({
+        projectId,
+        chains: [NETWORK.chainId],
+        optionalChains: [NETWORK.chainId],
+        showQrModal: true,
+        rpcMap: { [NETWORK.chainId]: NETWORK.rpcUrl },
+        metadata: { name: "ETH Lottery", description: "Verifiable on-chain lottery", url: window.location.origin, icons: [`${window.location.origin}/favicon.ico`] },
+      });
+      await provider.request({ method: "eth_requestAccounts" });
+      walletConnectRef.current = provider;
+      await configureWallet(provider, "walletconnect");
+      await ensureNetwork();
+      setTxStatus("Mobile wallet connected.");
+    } catch (error) {
+      setTxStatus(`WalletConnect unavailable: ${friendlyError(error)}`);
+    } finally {
+      setIsConnecting(false);
     }
-  }, [activePoolId, poolStates, isOwner, isPicking, pickWinner]);
+  }, [configureWallet, ensureNetwork]);
+
+  const disconnectWallet = useCallback(async () => {
+    await walletConnectRef.current?.disconnect?.();
+    walletConnectRef.current = null;
+    walletProviderRef.current = null;
+    browserProviderRef.current = null;
+    setAccount(null);
+    setWalletSource(null);
+    setChainOk(false);
+    setTxStatus("Wallet disconnected.");
+  }, []);
+
+  const trackTransaction = useCallback(async (
+    label: string,
+    contract: Contract,
+    method: string,
+    args: readonly unknown[],
+    value?: bigint,
+  ) => {
+    const options = value === undefined ? {} : { value };
+    setTxProgress({ state: "simulating", label, confirmations: 0 });
+    await contract.getFunction(method).staticCall(...args, options);
+    const gas = await contract.getFunction(method).estimateGas(...args, options);
+    const feeData = await contract.runner?.provider?.getFeeData();
+    const fee = feeData?.maxFeePerGas ? gas * feeData.maxFeePerGas : undefined;
+    setTxProgress({
+      state: "awaiting-signature",
+      label,
+      confirmations: 0,
+      estimatedGas: gas.toString(),
+      estimatedFeeEth: fee ? formatEther(fee) : undefined,
+    });
+
+    const transaction = await contract.getFunction(method).send(...args, options) as TransactionResponse;
+    setTxProgress((previous) => ({ ...previous!, state: "submitted", hash: transaction.hash }));
+    setTxStatus(`${label} submitted. Waiting for 2 confirmations…`);
+    try {
+      setTxProgress((previous) => ({ ...previous!, state: "confirming" }));
+      const receipt = await transaction.wait(2);
+      setTxProgress((previous) => ({ ...previous!, state: "confirmed", confirmations: 2 }));
+      return receipt;
+    } catch (error) {
+      const replacement = error as {
+        code?: string;
+        cancelled?: boolean;
+        replacement?: TransactionResponse;
+        receipt?: TransactionReceipt;
+      };
+      if (replacement.code === "TRANSACTION_REPLACED" && !replacement.cancelled && replacement.replacement) {
+        const receipt = replacement.receipt ?? await replacement.replacement.wait(2);
+        setTxProgress((previous) => ({
+          ...previous!,
+          state: "replaced",
+          replacementHash: replacement.replacement?.hash,
+          confirmations: 2,
+        }));
+        return receipt;
+      }
+      setTxProgress((previous) => previous ? { ...previous, state: "failed" } : null);
+      throw error;
+    }
+  }, []);
+
+  const buyTicket = useCallback(async (customReferrer?: string, count = 1) => {
+    setIsBuying(true);
+    try {
+      if (!Number.isSafeInteger(count) || count < 1 || count > 100) throw new Error("Invalid ticket count");
+      const contract = await getWriteContract();
+      const onChainPrice = await contract.ticketPrice() as bigint;
+      const referrer = customReferrer && isAddress(customReferrer)
+        ? customReferrer
+        : referrerAddress ?? ZERO_ADDRESS;
+      await trackTransaction("Ticket purchase", contract, "buyTicketsWithReferrer", [count, referrer], onChainPrice * BigInt(count));
+      setTxStatus(`${count} ticket${count === 1 ? "" : "s"} confirmed on-chain.`);
+      await Promise.all([fetchContractData(), fetchPastWinners()]);
+    } catch (error) {
+      setTxStatus(friendlyError(error));
+    } finally {
+      setIsBuying(false);
+    }
+  }, [fetchContractData, fetchPastWinners, getWriteContract, referrerAddress, trackTransaction]);
+
+  const pickWinner = useCallback(async () => {
+    setIsPicking(true);
+    try {
+      const contract = await getWriteContract();
+      await trackTransaction("VRF draw request", contract, "requestDraw", []);
+      setTxStatus("Draw requested. Chainlink VRF will fulfill the result asynchronously.");
+      await fetchContractData();
+    } catch (error) {
+      setTxStatus(friendlyError(error));
+    } finally {
+      setIsPicking(false);
+    }
+  }, [fetchContractData, getWriteContract, trackTransaction]);
+
+  const retryRandomness = useCallback(async () => {
+    setIsPicking(true);
+    try {
+      const contract = await getWriteContract();
+      await trackTransaction("VRF retry", contract, "retryRandomness", []);
+      setTxStatus("A replacement VRF request was submitted.");
+      await fetchContractData();
+    } catch (error) {
+      setTxStatus(friendlyError(error));
+    } finally {
+      setIsPicking(false);
+    }
+  }, [fetchContractData, getWriteContract, trackTransaction]);
+
+  const withdrawClaim = useCallback(async () => {
+    if (!account) return;
+    setIsBuying(true);
+    try {
+      const contract = await getWriteContract();
+      await trackTransaction("Claim withdrawal", contract, "withdrawWinnings", [account]);
+      setTxStatus("Claim withdrawn to your wallet.");
+      await fetchContractData();
+    } catch (error) {
+      setTxStatus(friendlyError(error));
+    } finally {
+      setIsBuying(false);
+    }
+  }, [account, fetchContractData, getWriteContract, trackTransaction]);
+
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      const now = Math.floor(Date.now() / 1000);
+      setPoolStates((previous) => {
+        const next = { ...previous };
+        for (const pool of POOLS) {
+          const end = endTimesRef.current.get(pool.id) ?? 0;
+          next[pool.id] = { ...next[pool.id], timeRemaining: end === 0 ? 0 : Math.max(0, end - now) };
+        }
+        return next;
+      });
+    }, 1_000);
+    return () => window.clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    const initial = window.setTimeout(() => {
+      void fetchContractData();
+      void fetchPastWinners();
+      void fetchEthPrice();
+    }, 0);
+    const dataPoll = window.setInterval(() => void fetchContractData(), 12_000);
+    const eventPoll = window.setInterval(() => void fetchPastWinners(), 30_000);
+    const pricePoll = window.setInterval(() => void fetchEthPrice(), 300_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(dataPoll);
+      window.clearInterval(eventPoll);
+      window.clearInterval(pricePoll);
+    };
+  }, [fetchContractData, fetchEthPrice, fetchPastWinners]);
+
+  useEffect(() => {
+    if (!window.ethereum) return;
+    const accountsChanged = (...args: unknown[]) => {
+      const accounts = args[0] as string[];
+      setAccount(accounts[0]?.toLowerCase() ?? null);
+    };
+    const chainChanged = (...args: unknown[]) => {
+      const chainId = String(args[0]).toLowerCase();
+      setChainOk(chainId === NETWORK.chainIdHex.toLowerCase());
+      browserProviderRef.current = null;
+    };
+    window.ethereum.on?.("accountsChanged", accountsChanged);
+    window.ethereum.on?.("chainChanged", chainChanged);
+    return () => {
+      window.ethereum?.removeListener?.("accountsChanged", accountsChanged);
+      window.ethereum?.removeListener?.("chainChanged", chainChanged);
+    };
+  }, []);
 
   return (
-    <WalletContext.Provider
-      value={{
-        mounted,
-        account,
-        referrerAddress,
-        isConnecting,
-        owner,
-        isBuying,
-        isPicking,
-        isRestarting,
-        txStatus,
-        ethUsdPrice,
-
-        activePoolId,
-        setActivePoolId,
-        pools: POOLS,
-        poolStates,
-        activePool,
-        activePoolConfig,
-
-        buyTicketWithUsd,
-        connectWallet,
-        disconnectWallet,
-        buyTicket,
-        pickWinner,
-        restartLottery,
-        fetchPastWinners,
-        fetchContractData,
-      }}
-    >
+    <WalletContext.Provider value={{
+      mounted,
+      account,
+      owner,
+      referrerAddress,
+      walletSource,
+      chainOk,
+      rpcHealthy,
+      isConnecting,
+      isBuying,
+      isPicking,
+      isRestarting: false,
+      txStatus,
+      txProgress,
+      ethUsdPrice,
+      ethPriceUpdatedAt,
+      activePoolId,
+      setActivePoolId,
+      pools: POOLS,
+      poolStates,
+      activePool,
+      activePoolConfig,
+      connectWallet,
+      connectMobileWallet,
+      disconnectWallet,
+      buyTicket,
+      pickWinner,
+      retryRandomness,
+      withdrawClaim,
+      fetchPastWinners,
+      fetchContractData,
+    }}>
       {children}
     </WalletContext.Provider>
   );
@@ -614,8 +634,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
 export function useWallet() {
   const context = useContext(WalletContext);
-  if (!context) {
-    throw new Error("useWallet must be used within a WalletProvider");
-  }
+  if (!context) throw new Error("useWallet must be used inside WalletProvider");
   return context;
 }

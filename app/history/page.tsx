@@ -12,7 +12,7 @@ function shortAddress(addr: string): string {
 }
 
 export default function HistoryPage() {
-  const { mounted, ethUsdPrice, pools, poolStates } = useWallet();
+  const { mounted, account, ethUsdPrice, pools, poolStates } = useWallet();
   const [selectedPoolId, setSelectedPoolId] = useState<string>("all");
 
   if (!mounted) return null;
@@ -26,6 +26,9 @@ export default function HistoryPage() {
         const pool = pools.find((p) => p.id === selectedPoolId)!;
         return { ...w, poolIcon: pool.icon, poolName: pool.name };
       });
+  const userTickets = pools.flatMap((pool) =>
+    (poolStates[pool.id]?.ticketHistory || []).map((ticket) => ({ ...ticket, poolName: pool.name, poolId: pool.id })),
+  ).sort((a, b) => b.blockNumber - a.blockNumber);
 
   return (
     <div className="min-h-screen flex flex-col justify-between relative overflow-x-hidden">
@@ -36,7 +39,7 @@ export default function HistoryPage() {
           {/* Header Section */}
           <div className="mb-10 text-center md:text-left">
             <span className="font-label-mono text-xs text-secondary-fixed uppercase tracking-widest block mb-2 font-bold">
-              // ON-CHAIN AUDIT LOG
+              ON-CHAIN AUDIT LOG
             </span>
             <h1 className="font-headline-lg text-4xl md:text-6xl text-primary uppercase tracking-tight">
               PAST DRAWS & WINNERS
@@ -45,6 +48,32 @@ export default function HistoryPage() {
               Historical record of all completed lottery draws and prize payouts emitted on-chain.
             </p>
           </div>
+
+          {account && (
+            <section className="mb-8 bg-surface-indigo border border-outline-variant p-6" aria-labelledby="ticket-history-title">
+              <h2 id="ticket-history-title" className="font-headline-lg text-2xl uppercase text-primary">Your on-chain tickets</h2>
+              {userTickets.length === 0 ? (
+                <p className="mt-3 text-sm text-on-surface-variant">No indexed ticket purchases for this wallet.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-xs font-label-mono">
+                    <thead className="text-on-surface-variant"><tr><th className="p-2">Pool</th><th className="p-2">Round</th><th className="p-2">Tickets</th><th className="p-2">Paid</th><th className="p-2">Transaction</th></tr></thead>
+                    <tbody>
+                      {userTickets.map((ticket) => (
+                        <tr key={`${ticket.transactionHash}-${ticket.firstTicket}`} className="border-t border-outline-variant/40">
+                          <td className="p-2">{ticket.poolName}</td>
+                          <td className="p-2">#{ticket.roundId}</td>
+                          <td className="p-2">#{ticket.firstTicket}–#{ticket.firstTicket + ticket.count - 1} ({ticket.count})</td>
+                          <td className="p-2">{ticket.amount} ETH</td>
+                          <td className="p-2 font-ticket-id">{shortAddress(ticket.transactionHash)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Pool Filter Tabs */}
           <div className="flex flex-wrap gap-2 mb-8">
@@ -100,6 +129,9 @@ export default function HistoryPage() {
                       </span>
                       <span className="font-label-mono text-[10px] text-on-surface-variant block mt-0.5">
                         Full: {draw.winner}
+                      </span>
+                      <span className={`font-label-mono text-[10px] block mt-1 ${draw.proofVerified ? "text-success-green" : "text-error"}`}>
+                        Round #{draw.roundId} · Winning ticket #{draw.winningTicket} · {draw.proofVerified ? "OWNER PROOF VERIFIED" : "PROOF UNAVAILABLE"}
                       </span>
                     </div>
                   </div>

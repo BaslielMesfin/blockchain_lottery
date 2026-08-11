@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/app/context/WalletContext";
+import { NETWORK } from "@/constants/contract";
 
 function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -17,13 +18,19 @@ export function Header() {
     { name: "Rules", href: "/rules" },
     { name: "History", href: "/history" },
     { name: "Terms", href: "/terms" },
+    { name: "Monitor", href: "/monitor" },
   ];
 
   return (
     <header className="bg-background text-primary border-b-2 border-dashed border-outline-variant flat flex justify-between items-center w-full px-4 md:px-16 py-4 max-w-7xl mx-auto z-40 sticky top-0">
-      <Link href="/" className="font-headline-lg text-2xl md:text-3xl text-primary uppercase tracking-tighter hover:opacity-90 transition-opacity">
-        ETH LOTTERY
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link href="/" className="font-headline-lg text-2xl md:text-3xl text-primary uppercase tracking-tighter hover:opacity-90 transition-opacity">
+          ETH LOTTERY
+        </Link>
+        <span className={`hidden sm:inline-block px-2 py-1 border font-label-mono text-[9px] font-bold uppercase ${NETWORK.testnet ? "border-warning-yellow text-warning-yellow" : "border-error text-error"}`}>
+          {NETWORK.testnet ? `${NETWORK.name} TESTNET · NO REAL VALUE` : "MAINNET · REAL ETH"}
+        </span>
+      </div>
 
       <nav className="hidden md:flex gap-8 items-center font-label-mono text-xs">
         {navLinks.map((link) => {

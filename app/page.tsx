@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/app/components/Header";
 import { MobileNav } from "@/app/components/MobileNav";
 import { Toast } from "@/app/components/Toast";
@@ -43,12 +43,17 @@ export default function DrawsPage() {
     mounted,
     account,
     referrerAddress,
-    owner,
+    chainOk,
+    rpcHealthy,
     isBuying,
     isPicking,
     buyTicket,
     pickWinner,
+    retryRandomness,
+    withdrawClaim,
     connectWallet,
+    connectMobileWallet,
+    txProgress,
     ethUsdPrice,
     activePoolId,
     setActivePoolId,
@@ -61,18 +66,22 @@ export default function DrawsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [ticketCount, setTicketCount] = useState<number>(1);
+  const [nowSeconds, setNowSeconds] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowSeconds(Math.floor(Date.now() / 1000)), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (!mounted) return null;
 
-  const isOwner = account !== null && owner !== "" && account === owner;
-  const currentSalesEth =
-    activePool.players.length > 0 && activePool.ticketPrice !== "0"
-      ? parseFloat(activePool.ticketPrice) * activePool.players.length
-      : 0;
   const rolloverEth = parseFloat(activePool.rolloverBalance || "0");
-  const totalPoolVal = currentSalesEth + rolloverEth;
-  const totalPool = parseFloat(totalPoolVal.toFixed(4)).toString();
+  const totalPoolVal = parseFloat(activePool.currentPot || "0");
   const winnerPrize = parseFloat((totalPoolVal * 0.70).toFixed(4)).toString();
+  const canBuy = activePool.contractReady && activePool.lotteryState === "OPEN" &&
+    (activePool.totalTickets === 0 || activePool.timeRemaining > 0);
+  const vrfRetryReady = activePool.lotteryState === "CALCULATING" && activePool.requestStartedAt > 0 &&
+    nowSeconds >= activePool.requestStartedAt + activePool.vrfTimeout;
 
   const isZeroWinner =
     !activePool.recentWinner || activePool.recentWinner === "0x0000000000000000000000000000000000000000";
@@ -127,6 +136,16 @@ export default function DrawsPage() {
             </div>
           </div>
 
+          <div className={`md:col-span-12 px-4 py-2.5 flex flex-wrap items-center gap-3 font-label-mono text-xs border ${
+            activePool.contractReady && rpcHealthy
+              ? "bg-success-green/10 border-success-green/50 text-success-green"
+              : "bg-error/10 border-error text-error"
+          }`} role="status">
+            <strong>{activePool.contractReady ? `${activePoolConfig.name} VERIFIED · ${activePoolConfig.address}` : "DEPLOYMENT NOT VERIFIED — PAYMENTS BLOCKED"}</strong>
+            <span>{rpcHealthy ? `RPC ONLINE · ROUND #${activePool.roundId}` : "RPC UNAVAILABLE"}</span>
+            {account && !chainOk && <span>WALLET IS ON THE WRONG NETWORK</span>}
+          </div>
+
           {/* Referred By Badge */}
           {referrerAddress && (
             <div className="md:col-span-12 bg-secondary-fixed/10 border border-secondary-fixed text-secondary-fixed px-4 py-2.5 flex items-center gap-2 font-label-mono text-xs shadow-md">
@@ -178,7 +197,15 @@ export default function DrawsPage() {
                       Tickets Sold
                     </span>
                     <span className="font-ticket-id text-sm md:text-base font-bold text-void-black block">
-                      {activePool.players.length}
+                      {activePool.totalTickets}
+                    </span>
+                  </div>
+                  <div className="bg-void-black/5 px-4 py-2 border border-void-black/10">
+                    <span className="font-label-mono text-[10px] md:text-xs text-void-black/60 block">Your Exact Odds</span>
+                    <span className="font-ticket-id text-sm md:text-base font-bold text-void-black block">
+                      {activePool.totalTickets > 0
+                        ? `${activePool.userTickets}/${activePool.totalTickets} (${((activePool.userTickets / activePool.totalTickets) * 100).toFixed(2)}%)`
+                        : "0%"}
                     </span>
                   </div>
                 </div>
@@ -200,7 +227,7 @@ export default function DrawsPage() {
             <div className="bg-surface-indigo text-primary border border-outline-variant ticket-notch w-full shadow-xl flex flex-col md:flex-row relative">
               <div className="flex-1 p-6 md:p-8 relative flex flex-col justify-center items-center md:items-start text-center md:text-left">
                 {/* Stamp Badge */}
-                {activePool.lotteryOpen ? (
+                {canBuy ? (
                   <div className="absolute top-4 right-4 md:top-6 md:right-6 border-4 border-success-green text-success-green font-headline-lg text-xl md:text-2xl px-3 py-1 rotate-6 opacity-90 shadow-md">
                     LIVE
                   </div>
@@ -278,7 +305,7 @@ export default function DrawsPage() {
                 {account ? (
                   <button
                     onClick={() => buyTicket(undefined, ticketCount)}
-                    disabled={isBuying || !activePool.lotteryOpen}
+                    disabled={isBuying || !canBuy || !chainOk}
                     className="w-full bg-primary-container text-on-primary-fixed font-headline-lg text-lg md:text-xl py-3 px-4 hover:shadow-[4px_4px_0px_0px_#000000] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 mb-1 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                   >
                     {isBuying ? (
@@ -301,15 +328,35 @@ export default function DrawsPage() {
 
                 <button
                   onClick={() => setIsModalOpen(true)}
-                  disabled={isBuying || !activePool.lotteryOpen}
+                  disabled={isBuying || !canBuy}
                   className="w-full bg-transparent hover:bg-secondary-fixed/10 text-secondary-fixed border-2 border-secondary-fixed/50 font-headline-lg text-lg md:text-xl py-2.5 px-4 hover:shadow-[4px_4px_0px_0px_rgba(0,251,251,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none transition-all duration-200 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 uppercase font-bold"
                 >
-                  PAY WITH USD / CARD (${((parseFloat(activePool.ticketPrice) * ticketCount) * ethUsdPrice).toFixed(2)})
+                  BUY ETH WITH CARD / ON-RAMP
                 </button>
 
                 <span className="font-label-mono text-[10px] text-on-surface-variant opacity-70 text-center mt-1">
-                  Gas approx. 0.002 ETH (ETH option only)
+                  Exact gas is simulated before wallet approval.
                 </span>
+
+                {!account && (
+                  <button
+                    onClick={connectMobileWallet}
+                    className="w-full border border-outline-variant text-on-surface-variant py-2 font-label-mono text-[10px] uppercase cursor-pointer"
+                  >
+                    CONNECT MOBILE / WALLETCONNECT
+                  </button>
+                )}
+
+                {txProgress && (
+                  <div className="w-full border border-outline-variant/50 bg-surface-container-lowest p-3 font-label-mono text-[10px]" aria-live="polite">
+                    <strong className="uppercase">{txProgress.label}: {txProgress.state}</strong>
+                    {txProgress.estimatedGas && (
+                      <span className="block mt-1">Estimated gas: {txProgress.estimatedGas} · max fee {txProgress.estimatedFeeEth ?? "pending"} ETH</span>
+                    )}
+                    {txProgress.hash && <span className="block break-all mt-1">Tx: {txProgress.hash}</span>}
+                    {txProgress.replacementHash && <span className="block break-all mt-1">Replacement: {txProgress.replacementHash}</span>}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -401,17 +448,25 @@ export default function DrawsPage() {
               </div>
               
               <p className="font-body-md text-xs text-on-surface-variant leading-relaxed">
-                Zero admin control or owner privileges. The smart contract automatically executes 70/20/10 payouts on-chain.
+                Chainlink-compatible VRF chooses the winning ticket. Automation requests draws, and pull-based claims prevent a hostile recipient from blocking later rounds.
               </p>
 
-              {activePool.timeRemaining === 0 && activePool.players.length > 0 ? (
+              {activePool.lotteryState === "OPEN" && activePool.timeRemaining === 0 && activePool.totalTickets > 0 ? (
                 <button
                   onClick={pickWinner}
                   disabled={isPicking}
                   className="bg-success-green text-void-black border border-success-green px-4 py-2.5 font-label-mono text-xs font-bold hover:shadow-[3px_3px_0px_0px_#000] active:translate-y-0.5 transition-all w-full text-center uppercase flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-base">emoji_events</span>
-                  <span>{isPicking ? "DRAWING WINNER…" : `TRIGGER WINNER DRAW (${activePool.players.length} TICKET${activePool.players.length > 1 ? "S" : ""})`}</span>
+                  <span>{isPicking ? "REQUESTING VRF…" : `REQUEST DRAW (${activePool.totalTickets} TICKET${activePool.totalTickets > 1 ? "S" : ""})`}</span>
+                </button>
+              ) : activePool.lotteryState === "CALCULATING" ? (
+                <button
+                  onClick={retryRandomness}
+                  disabled={isPicking || !vrfRetryReady}
+                  className="border border-warning-yellow text-warning-yellow px-4 py-2.5 font-label-mono text-xs font-bold uppercase disabled:opacity-50 cursor-pointer"
+                >
+                  {vrfRetryReady ? "RETRY STALLED VRF REQUEST" : `WAITING FOR CHAINLINK VRF #${activePool.activeRequestId}`}
                 </button>
               ) : (
                 <div className="flex items-center gap-2 font-label-mono text-[10px] text-secondary-fixed bg-secondary-fixed/10 px-3 py-2 border border-secondary-fixed/30 font-bold">
@@ -419,13 +474,23 @@ export default function DrawsPage() {
                   <span>AUTONOMOUS DRAW ENFORCED ON-CHAIN</span>
                 </div>
               )}
+
+              {account && parseFloat(activePool.claimable) > 0 && (
+                <button
+                  onClick={withdrawClaim}
+                  disabled={isBuying}
+                  className="bg-secondary-fixed text-on-secondary-fixed px-4 py-2.5 font-label-mono text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
+                >
+                  CLAIM {activePool.claimable} ETH
+                </button>
+              )}
             </div>
           </div>
         </main>
       </div>
 
       <Toast />
-      <UsdPaymentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <UsdPaymentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} ticketCount={ticketCount} />
       <MobileNav />
     </div>
   );

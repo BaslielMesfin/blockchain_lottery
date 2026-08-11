@@ -11,6 +11,7 @@ export function MobileNav() {
     { name: "Rules", href: "/rules", icon: "menu_book" },
     { name: "History", href: "/history", icon: "emoji_events" },
     { name: "Terms", href: "/terms", icon: "description" },
+    { name: "Health", href: "/monitor", icon: "monitor_heart" },
   ];
 
   return (

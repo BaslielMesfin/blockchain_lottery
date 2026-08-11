@@ -1,182 +1,128 @@
-# 🎟️ ETH LOTTERY — 100% Autonomous Multi-Pool Jackpot dApp 🚀
+# ETH Lottery
 
-**ETH Lottery** is an autonomous Web3 dApp built with Next.js, Tailwind CSS, and Solidity. Featuring a cyberpunk "ticket-stub" interface, players buy 0.01 ETH tickets across 4 pool tiers (1-Min, 1-Hour, 6-Hour, 1-Week) to win an automated 70% jackpot, 20% referrer reward (or jackpot rollover), and 10% house fee. 💰
+A Sepolia-first, time-based ETH lottery built with Solidity 0.8.28, Hardhat 3, ethers v6, Next.js 16, and React 19.
 
----
+> This repository is testnet software. The checked-in deployment configuration targets a local Hardhat chain and has no real monetary value. Do not accept mainnet funds without an independent smart-contract audit, legal review, approved on-ramp provider, and production operations plan.
 
-## 🌟 Overview 📝
+## Security model
 
-**ETH Lottery** grounds abstract blockchain interactions in a familiar physical metaphor—the paper ticket. Designed with a **Tactile High-Contrast Cyberpunk** aesthetic, the dApp features cut-out ticket stubs, perforated dividers, decorative barcode strips, and high-impact typography. 🎨
+- Chainlink VRF v2.5-compatible requests select an exact winning ticket.
+- Chainlink Automation-compatible `checkUpkeep`/`performUpkeep` functions trigger expired draws.
+- A timed-out VRF request can be retried permissionlessly.
+- Prize, referral, and house allocations use pull payments. A recipient that rejects ETH cannot freeze the lottery.
+- Bulk purchases are stored as cumulative ticket batches rather than one storage entry per ticket.
+- Every completed round stores its random word, request ID, winning ticket, ticket total, pot, payout allocation, and timestamp.
+- The frontend verifies chain ID and deployed bytecode before enabling a payment.
+- Every write is simulated and gas-estimated before signature, then tracked through two confirmations and wallet replacement.
+- Ethereum state and event logs are authoritative. The indexer API is a disposable read model, not a source of truth.
 
-The entire lottery lifecycle is **100% autonomous and trustless**. Zero owner privileges or admin intervention required. All funds, player entries, referral mappings, automatic round rollovers, countdown timers, 70/20/10 payout splits, and unreferred 20% jackpot rollovers are enforced by Solidity smart contracts deployed on the Ethereum blockchain. ⚡
+## Current payment behavior
 
----
+ETH wallet payment is the only ticket payment method. The “buy ETH with card” flow is a hosted crypto on-ramp handoff: an approved third party handles card data and sends ETH to the user’s wallet. The user still signs the ticket purchase on-chain.
 
-## ✨ Key Features ⚡
+This application never accepts raw card numbers or CVC values. The on-ramp button stays disabled until `NEXT_PUBLIC_ONRAMP_URL_TEMPLATE` is configured for an approved provider. Provider refunds, identity checks, chargebacks, and fiat reconciliation remain with that hosted provider; the lottery recognizes only confirmed on-chain ticket transactions.
 
-- 🎟️ **4 Multi-Tier Pools:** Choose between ⚡ **1-Min Flash**, ⏱️ **1-Hour Express**, 🔥 **6-Hour Standard**, and 💎 **1-Week Mega** pools running simultaneously.
-- 💵 **USD Primary Currency Display:** Primary hero numbers, ticket prices, and history payouts are displayed in USD with real-time ETH/USD CoinGecko price integration and subtext ETH values.
-- 🤝 **Referral System (20% Reward):** Share referral links (`/?ref=YOUR_WALLET`). When your referee wins, 20% of the gross jackpot is automatically sent to your referrer wallet on-chain!
-- 🔄 **20% Unreferred Jackpot Rollover:** If a winner has no referrer, the 20% referral fee automatically rolls over into the smart contract balance for the next round's jackpot!
-- 💰 **70/20/10 Prize Split:** Jackpot pool is distributed 70% to Winner, 20% to Referrer/Rollover, and 10% to Protocol Owner.
-- 🤖 **100% Autonomous & Permissionless:** Anyone can trigger a winner draw when the timer expires. Buying a ticket in an expired round automatically executes the draw or restarts the round.
-- 💳 **USD / Credit Card Payment Option:** In addition to Web3 wallets (MetaMask/Rabby), users can pay via card simulation.
-- 📜 **On-Chain Audit Log (History):** View historical draw results with pool filter tabs (All Pools, Flash, Express, Standard, Mega) fetched directly from smart contract event logs.
-- 📋 **Terms & Conditions Page (`/terms`):** Detailed breakdown of multi-pool tiers, prize distribution, referral mechanisms, auto-rollover, and protocol governance.
-- 📖 **Interactive Rules Page (`/rules`):** Built-in protocol guide explaining ticket prices, draw mechanics, and provable transparency.
-- 🔌 **Web3 Wallet Bridge:** Connect/disconnect MetaMask or Rabby wallets with real-time account detection and network status feedback.
+## Features
 
----
+- Four independent pools: 1 minute, 1 hour, 6 hours, and 1 week.
+- 70% winner claim, 20% referrer claim or rollover, and 10% house claim.
+- On-chain referral attribution.
+- Live round state and event indexing.
+- Wallet-specific ticket history, ticket ranges, exact current odds, claims, and verified winning-ticket proofs.
+- RPC, deployment, overdue draw, stalled VRF, keeper funding, pot, and payout-liability monitoring at `/monitor` and `/api/monitor`.
+- Browser wallet support and an optional WalletConnect runtime adapter.
+- Prominent local/testnet/mainnet banners and accessible modal/dialog behavior.
 
-## 🛠️ Technical Architecture 🏗️
+## Requirements
 
-### 📊 Tech Stack
+- Node.js 20.9 or newer; Node 22 is used in CI.
+- MetaMask, Rabby, or another EIP-1193 wallet.
+- For Sepolia: funded deployer, VRF v2.5 subscription, coordinator/key hash, Automation upkeep, RPC endpoint, and optionally a Reown project ID.
 
-| Layer 🧱 | Technology 💻 | Description 📄 |
-|---|---|---|
-| **Smart Contract** 📜 | Solidity `0.8.20` | Core lottery logic, referral registry, 70/20/10 payout split, auto-rollover |
-| **Framework** ⚡ | Next.js 16 (App Router) | React 19 framework with TypeScript and Turbopack |
-| **Styling** 🎨 | Tailwind CSS v4 | Custom design tokens, clip-path ticket notches, barcode utility patterns |
-| **Web3 Integration** 🌐 | ethers.js `v6` | Provider, signer, contract instance management, event filter querying |
-| **Development Environment** 🛠️ | Hardhat | Local EVM network node, compilation, and deployment pipeline |
+Copy `.env.example` to `.env.local` for the website and/or `.env` for Hardhat. Never commit private keys.
 
----
-
-## 🚀 How to Set Up & Run ETH Lottery on Your Computer
-
-Follow these steps to clone the project, start the local blockchain (Hardhat), deploy the contract, and launch the website.
-
----
-
-## 📋 Prerequisites
-1. **Node.js** (v18 or higher installed) → Check with `node -v`
-2. **Git** installed → Check with `git --version`
-3. **MetaMask** or **Rabby** browser extension installed in your browser.
-
----
-
-## 1️⃣ Clone the Repo & Install Dependencies
-
-Open your terminal or PowerShell and run:
+## Local development
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/BaslielMesfin/blockchain_lottery.git
-
-# 2. Go into the project folder
-cd blockchain_lottery
-
-# 3. Install all required dependencies
 npm install
-```
-
----
-
-## 2️⃣ Start the Local Hardhat Blockchain (Terminal 1)
-
-In your first terminal window, start the local Ethereum test network:
-
-```bash
 npx hardhat node
 ```
 
-> ⚠️ **Keep this terminal window running!**
-> It will display 20 test accounts, each loaded with 10,000 fake test ETH.
-> Look at **Account #0** in that terminal output. Copy its private key for step 5:
-
-**Account #0 Private Key:**
-`0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
-
----
-
-## 3️⃣ Compile & Deploy the Contract (Terminal 2)
-
-Open a **second terminal window** in the `blockchain_lottery` folder and run:
+In a second terminal:
 
 ```bash
-# 1. Compile the Solidity contract
-npx hardhat compile
-
-# 2. Deploy to your running local Hardhat node
+npm run contracts:build
 npx hardhat run scripts/deploy.ts --network localhost
-```
-
-You will see:
-```text
-🚀 Deploying TimeBasedLottery to localhost...
-✅ Contract Deployed To: 0x5FbDB2315678afecb367f032d93F642f64180aa3
-📝 Updated constants/contract.ts with address + ABI!
-```
-
----
-
-## 4️⃣ Start the Next.js Dev Server (Terminal 2)
-
-In the same second terminal window, start the website:
-
-```bash
 npm run dev
 ```
 
-Open **[http://localhost:3000](http://localhost:3000)** in your browser! 🌐
+Open `http://localhost:3000`. The deployment script creates a local VRF coordinator mock, deploys all pools, and rewrites `constants/contract.ts` with the resulting chain-specific addresses.
 
----
+After a local round expires, run the local Automation/VRF helper:
 
-## 5️⃣ Configure Your Wallet (MetaMask / Rabby)
-
-To test buying tickets and interacting with the contract:
-
-### Add Local Network to your Wallet:
-- **Network Name:** Hardhat Localhost
-- **RPC URL:** `http://127.0.0.1:8545`
-- **Chain ID:** `31337`
-- **Currency Symbol:** ETH
-
-### Import Test Account:
-Go to **Account Switcher** → **Import Account** → **Import Private Key**.
-
-Paste Account #0 Private Key:
-`0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
-
-You will now see **10,000 test ETH** ready to test the dApp! 🎟️
-
----
-
-## 📁 Project Structure 🗂️
-
-```
-blockchain_lottery/
-├── app/
-│   ├── components/
-│   │   ├── Header.tsx         # 🔝 Navigation bar & wallet connect/disconnect button
-│   │   ├── MobileNav.tsx      # 📱 Mobile bottom navigation bar
-│   │   ├── Toast.tsx          # 🏷️ Ticket-tag notification toast overlay
-│   │   └── UsdPaymentModal.tsx# 💳 USD/Card payment modal
-│   ├── context/
-│   │   └── WalletContext.tsx  # 🌐 Shared Web3 provider, referral state & context
-│   ├── history/
-│   │   └── page.tsx           # 📜 Past draws & winner audit log page with referrers
-│   ├── rules/
-│   │   └── page.tsx           # 📖 Protocol rules & transparency guide page
-│   ├── terms/
-│   │   └── page.tsx           # 📋 Terms & Conditions page (70/20/10 split, referrals)
-│   ├── globals.css            # 🎨 Cyberpunk design system, tokens & clip-paths
-│   ├── layout.tsx             # 🧱 Root layout with Google Fonts (Anton, Hanken, JetBrains)
-│   ├── page.tsx               # 🎟️ Main Draws jackpot dashboard & Refer & Earn card
-│   └── providers.tsx          # 🔌 Client provider wrapper
-├── constants/
-│   └── contract.ts            # 🔑 Contract deployment address & complete ABI
-├── contracts/
-│   └── TimeBasedLottery.sol   # 📜 Solidity smart contract with referral & auto-rollover
-├── scripts/
-│   └── deploy.ts              # 🚀 Hardhat deployment script (2-hour default duration)
-├── test/
-│   └── TimeBasedLottery.test.ts # 🧪 Hardhat test suite for referral, split & rollover
-└── hardhat.config.ts          # ⚙️ Hardhat configuration for local network node
+```bash
+npx hardhat run scripts/local-automation.ts --network localhost
 ```
 
----
+The helper is deliberately restricted to chain ID 31337 and must never be used as production randomness.
 
-## 📄 License ⚖️
+## Sepolia deployment
+
+1. Create and fund a Chainlink VRF v2.5 subscription.
+2. Set `SEPOLIA_PRIVATE_KEY`, `SEPOLIA_RPC_URL`, `VRF_COORDINATOR`, `VRF_SUBSCRIPTION_ID`, and `VRF_KEY_HASH` locally.
+3. Compile and deploy:
+
+```bash
+npm run contracts:build
+npx hardhat run scripts/deploy.ts --network sepolia
+```
+
+4. Add all four deployed lotteries as VRF subscription consumers.
+5. Register each lottery as a Chainlink Automation custom-logic upkeep.
+6. Verify the contracts on a block explorer.
+7. Commit the generated `constants/contract.ts` only after confirming every address has bytecode on chain ID 11155111.
+
+No Sepolia deployment is performed automatically by this repository because it requires a funded private key and Chainlink subscription.
+
+## WalletConnect and hosted on-ramp
+
+Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` after creating a Reown project. The UI loads the WalletConnect provider only when the mobile-connect button is used. Install the provider dependency when enabling it:
+
+```bash
+npm install @walletconnect/ethereum-provider
+```
+
+Set `NEXT_PUBLIC_ONRAMP_URL_TEMPLATE` only after a provider approves this use case. Supported placeholders are `{address}`, `{chainId}`, and `{amountEth}`. The final hosted URL must be created according to that provider’s current signed-session requirements; do not put secret API keys in a `NEXT_PUBLIC_` variable.
+
+## Indexing and monitoring
+
+`/api/indexer?pool=standard&account=0x...` reads logs in bounded block chunks, joins draw and payout events, and verifies the winning-ticket owner against contract storage. The browser polls this endpoint for live history. A production deployment can replace the implementation with The Graph or a Postgres-backed worker without changing the contract’s authority.
+
+`/api/monitor` checks:
+
+- RPC availability and latency.
+- Contract bytecode at every configured address.
+- Draws overdue by more than five minutes.
+- VRF requests beyond the configured retry timeout.
+- Current pots and outstanding payout liabilities.
+- Optional keeper balance against `KEEPER_MIN_ETH`.
+
+## Verification
+
+```bash
+npm run check
+```
+
+The command compiles contracts, runs Solidity and TypeScript tests, type-checks, lints, and creates a production Next.js build. CI runs the same checks on pushes and pull requests.
+
+## Important limitations
+
+- The local Chainlink-compatible interfaces are intentionally minimal and ABI-compatible with the methods used here. Before Sepolia deployment, compare them against the currently published Chainlink contracts and documentation.
+- The event indexer has no persistent database. This is intentional for the current stage; it may be slower over a large block history.
+- A provider project ID and package installation are still required to activate WalletConnect.
+- A hosted on-ramp account and approval are still required to activate card-to-ETH purchases.
+- Lottery and referral products may be regulated or prohibited depending on jurisdiction. Technical deployment is not legal approval.
+
+## License
 
 MIT
