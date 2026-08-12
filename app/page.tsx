@@ -55,6 +55,9 @@ export default function DrawsPage() {
     connectMobileWallet,
     txProgress,
     ethUsdPrice,
+    ethPriceSource,
+    ethPriceUpdatedAt,
+    ethPriceStale,
     activePoolId,
     setActivePoolId,
     pools,
@@ -88,6 +91,8 @@ export default function DrawsPage() {
 
   const winnerPrizeUsd = parseFloat(winnerPrize) * ethUsdPrice;
   const ticketPriceUsd = parseFloat(activePool.ticketPrice) * ethUsdPrice;
+  const hasUsdQuote = ethUsdPrice > 0;
+  const totalTicketPriceUsd = ticketPriceUsd * ticketCount;
 
   return (
     <div className="min-h-screen flex flex-col justify-between relative overflow-x-hidden">
@@ -167,7 +172,9 @@ export default function DrawsPage() {
                   ★ WINNER PRIZE ★
                 </span>
                 <h2 className="font-display-jackpot text-6xl md:text-8xl text-void-black mb-2 leading-none">
-                  ${winnerPrizeUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                  {hasUsdQuote
+                    ? `$${winnerPrizeUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                    : "USD PRICE UNAVAILABLE"}
                 </h2>
                 <div className="font-label-mono text-sm md:text-base text-void-black/70 mb-2 font-bold">
                   ({winnerPrize} ETH)
@@ -186,11 +193,17 @@ export default function DrawsPage() {
                       Ticket Price
                     </span>
                     <span className="font-ticket-id text-sm md:text-base font-bold text-void-black block">
-                      ${ticketPriceUsd.toFixed(2)} USD
+                      {hasUsdQuote ? `$${ticketPriceUsd.toFixed(2)} USD` : "USD quote unavailable"}
                     </span>
                     <span className="font-label-mono text-[10px] text-void-black/60 block mt-0.5">
                       ({activePool.ticketPrice} ETH)
                     </span>
+                    {hasUsdQuote && (
+                      <span className="font-label-mono text-[9px] text-void-black/50 block mt-1">
+                        {ethPriceStale ? "Stale" : "Live"} {ethPriceSource ?? "market"} quote
+                        {ethPriceUpdatedAt ? ` · ${new Date(ethPriceUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                      </span>
+                    )}
                   </div>
                   <div className="bg-void-black/5 px-4 py-2 border border-void-black/10">
                     <span className="font-label-mono text-[10px] md:text-xs text-void-black/60 block">
@@ -314,7 +327,7 @@ export default function DrawsPage() {
                         BUYING…
                       </>
                     ) : (
-                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} (${parseFloat((parseFloat(activePool.ticketPrice) * ticketCount).toFixed(4))} ETH)`
+                      `BUY ${ticketCount} TICKET${ticketCount > 1 ? "S" : ""} — ${hasUsdQuote ? `$${totalTicketPriceUsd.toFixed(2)} USD` : `${parseFloat((parseFloat(activePool.ticketPrice) * ticketCount).toFixed(4))} ETH`}`
                     )}
                   </button>
                 ) : (

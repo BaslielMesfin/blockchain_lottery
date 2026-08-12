@@ -69,7 +69,7 @@ The helper is deliberately restricted to chain ID 31337 and must never be used a
 ## Sepolia deployment
 
 1. Create and fund a Chainlink VRF v2.5 subscription.
-2. Set `SEPOLIA_PRIVATE_KEY`, `SEPOLIA_RPC_URL`, `VRF_COORDINATOR`, `VRF_SUBSCRIPTION_ID`, and `VRF_KEY_HASH` locally.
+2. Set `SEPOLIA_PRIVATE_KEY`, `SEPOLIA_RPC_URL`, `VRF_COORDINATOR`, `VRF_SUBSCRIPTION_ID`, and `VRF_KEY_HASH` locally. `.env.example` contains the current official Sepolia coordinator and 500 gwei key hash; verify them against Chainlink documentation before every deployment.
 3. Compile and deploy:
 
 ```bash

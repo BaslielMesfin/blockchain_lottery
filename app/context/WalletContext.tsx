@@ -106,6 +106,8 @@ interface WalletContextType {
   txProgress: TransactionProgress | null;
   ethUsdPrice: number;
   ethPriceUpdatedAt: number | null;
+  ethPriceSource: string | null;
+  ethPriceStale: boolean;
   activePoolId: string;
   setActivePoolId: (id: string) => void;
   pools: PoolConfig[];
@@ -121,6 +123,7 @@ interface WalletContextType {
   withdrawClaim: () => Promise<void>;
   fetchPastWinners: () => Promise<void>;
   fetchContractData: () => Promise<void>;
+  clearTransactionFeedback: () => void;
 }
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -180,6 +183,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [txProgress, setTxProgress] = useState<TransactionProgress | null>(null);
   const [ethUsdPrice, setEthUsdPrice] = useState(0);
   const [ethPriceUpdatedAt, setEthPriceUpdatedAt] = useState<number | null>(null);
+  const [ethPriceSource, setEthPriceSource] = useState<string | null>(null);
+  const [ethPriceStale, setEthPriceStale] = useState(false);
   const [activePoolId, setActivePoolId] = useState(DEFAULT_POOL_ID);
   const [poolStates, setPoolStates] = useState<Record<string, PoolState>>(() =>
     Object.fromEntries(POOLS.map((pool) => [pool.id, emptyPool(pool)])),
@@ -361,14 +366,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const fetchEthPrice = useCallback(async () => {
     try {
-      const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
-      if (!response.ok) throw new Error(`Price HTTP ${response.status}`);
-      const data = (await response.json()) as { ethereum?: { usd?: number } };
-      if (!data.ethereum?.usd) throw new Error("Missing ETH quote");
-      setEthUsdPrice(data.ethereum.usd);
-      setEthPriceUpdatedAt(Date.now());
-    } catch (error) {
-      console.error("ETH/USD quote unavailable", error);
+      const response = await fetch("/api/eth-price", { cache: "no-store" });
+      if (!response.ok) {
+        setEthPriceStale(true);
+        return;
+      }
+      const data = (await response.json()) as { usd?: number; source?: string; fetchedAt?: string; stale?: boolean };
+      if (!data.usd || !Number.isFinite(data.usd)) {
+        setEthPriceStale(true);
+        return;
+      }
+      setEthUsdPrice(data.usd);
+      setEthPriceSource(data.source ?? null);
+      setEthPriceUpdatedAt(data.fetchedAt ? Date.parse(data.fetchedAt) : Date.now());
+      setEthPriceStale(Boolean(data.stale));
+    } catch {
+      setEthPriceStale(true);
     }
   }, []);
 
@@ -437,6 +450,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     args: readonly unknown[],
     value?: bigint,
   ) => {
+    try {
+    setTxStatus(`${label}: checking contract and estimating gas…`);
     const options = value === undefined ? {} : { value };
     setTxProgress({ state: "simulating", label, confirmations: 0 });
     await contract.getFunction(method).staticCall(...args, options);
@@ -451,10 +466,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       estimatedFeeEth: fee ? formatEther(fee) : undefined,
     });
 
+    setTxStatus(`${label}: approve or cancel in your wallet.`);
     const transaction = await contract.getFunction(method).send(...args, options) as TransactionResponse;
     setTxProgress((previous) => ({ ...previous!, state: "submitted", hash: transaction.hash }));
     setTxStatus(`${label} submitted. Waiting for 2 confirmations…`);
-    try {
       setTxProgress((previous) => ({ ...previous!, state: "confirming" }));
       const receipt = await transaction.wait(2);
       setTxProgress((previous) => ({ ...previous!, state: "confirmed", confirmations: 2 }));
@@ -479,6 +494,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setTxProgress((previous) => previous ? { ...previous, state: "failed" } : null);
       throw error;
     }
+  }, []);
+
+  const clearTransactionFeedback = useCallback(() => {
+    setTxStatus(null);
+    setTxProgress(null);
   }, []);
 
   const buyTicket = useCallback(async (customReferrer?: string, count = 1) => {
@@ -611,6 +631,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       txProgress,
       ethUsdPrice,
       ethPriceUpdatedAt,
+      ethPriceSource,
+      ethPriceStale,
       activePoolId,
       setActivePoolId,
       pools: POOLS,
@@ -626,6 +648,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       withdrawClaim,
       fetchPastWinners,
       fetchContractData,
+      clearTransactionFeedback,
     }}>
       {children}
     </WalletContext.Provider>
