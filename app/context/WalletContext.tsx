@@ -267,8 +267,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const getWriteContract = useCallback(async () => {
     await ensureNetwork();
-    const provider = browserProviderRef.current;
-    if (!provider) throw new Error("Connect a wallet first");
+    const source = walletProviderRef.current ?? window.ethereum;
+    if (!source) throw new Error("Connect a wallet first");
+    const provider = new BrowserProvider(source, "any");
+    browserProviderRef.current = provider;
     const network = await provider.getNetwork();
     if (Number(network.chainId) !== NETWORK.chainId) throw new Error("Wrong network");
     const code = await provider.getCode(activePoolConfig.address);
