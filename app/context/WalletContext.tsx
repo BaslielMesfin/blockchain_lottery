@@ -115,6 +115,7 @@ interface WalletContextType {
   activePool: PoolState;
   activePoolConfig: PoolConfig;
   connectWallet: () => Promise<void>;
+  connectWalletWithProvider: (provider: Eip1193Provider) => Promise<void>;
   connectMobileWallet: () => Promise<void>;
   disconnectWallet: () => Promise<void>;
   buyTicket: (customReferrer?: string, count?: number) => Promise<void>;
@@ -402,6 +403,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [configureWallet, ensureNetwork]);
 
+  const connectWalletWithProvider = useCallback(async (provider: Eip1193Provider) => {
+    setIsConnecting(true);
+    try {
+      await configureWallet(provider as BrowserWallet, "injected");
+      await ensureNetwork();
+      setTxStatus("Wallet connected.");
+    } catch (error) {
+      setTxStatus(friendlyError(error));
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [configureWallet, ensureNetwork]);
+
   const connectMobileWallet = useCallback(async () => {
     const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
     if (!projectId) {
@@ -640,6 +654,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       activePool,
       activePoolConfig,
       connectWallet,
+      connectWalletWithProvider,
       connectMobileWallet,
       disconnectWallet,
       buyTicket,

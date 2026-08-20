@@ -5,6 +5,7 @@ import { Header } from "@/app/components/Header";
 import { MobileNav } from "@/app/components/MobileNav";
 import { Toast } from "@/app/components/Toast";
 import { UsdPaymentModal } from "@/app/components/UsdPaymentModal";
+import { WalletModal } from "@/app/components/WalletModal";
 import { useWallet } from "@/app/context/WalletContext";
 
 function shortAddress(addr: string): string {
@@ -51,7 +52,6 @@ export default function DrawsPage() {
     pickWinner,
     retryRandomness,
     withdrawClaim,
-    connectWallet,
     connectMobileWallet,
     txProgress,
     ethUsdPrice,
@@ -67,6 +67,7 @@ export default function DrawsPage() {
   } = useWallet();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [ticketCount, setTicketCount] = useState<number>(1);
   const [nowSeconds, setNowSeconds] = useState(0);
@@ -332,7 +333,7 @@ export default function DrawsPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={connectWallet}
+                    onClick={() => setWalletModalOpen(true)}
                     className="w-full bg-primary-container text-on-primary-fixed font-headline-lg text-lg md:text-xl py-3 px-4 hover:shadow-[4px_4px_0px_0px_#000000] hover:-translate-y-0.5 transition-all duration-200 mb-1 cursor-pointer uppercase font-bold"
                   >
                     CONNECT WALLET
@@ -504,6 +505,7 @@ export default function DrawsPage() {
 
       <Toast />
       <UsdPaymentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} ticketCount={ticketCount} />
+      <WalletModal isOpen={walletModalOpen} onClose={() => setWalletModalOpen(false)} />
       <MobileNav />
     </div>
   );
