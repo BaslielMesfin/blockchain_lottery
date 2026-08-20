@@ -21,13 +21,13 @@ export interface PoolConfig {
 }
 
 export const NETWORK: NetworkConfig = {
-  chainId: 31337,
-  chainIdHex: "0x7a69",
-  name: "Hardhat Local",
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545",
-  explorerUrl: "",
+  chainId: 11155111,
+  chainIdHex: "0xaa36a7",
+  name: "Ethereum Sepolia",
+  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "https://ethereum-sepolia.publicnode.com",
+  explorerUrl: "https://sepolia.etherscan.io",
   testnet: true,
-  vrfCoordinator: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  vrfCoordinator: "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B",
 };
 
 export const POOLS: PoolConfig[] = [
@@ -35,37 +35,37 @@ export const POOLS: PoolConfig[] = [
     "id": "flash",
     "name": "1-MIN FLASH",
     "icon": "bolt",
-    "address": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+    "address": "0xd0e317140AB44F80F55D349d9078e949F6ac0332",
     "duration": 60,
     "ticketPriceEth": "0.01",
-    "deploymentBlock": 2
+    "deploymentBlock": 11528120
   },
   {
     "id": "express",
     "name": "1-HOUR EXPRESS",
     "icon": "avg_pace",
-    "address": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "address": "0xdE87F1713195245dd2605F83d6B6290a840ADb4b",
     "duration": 3600,
     "ticketPriceEth": "0.01",
-    "deploymentBlock": 3
+    "deploymentBlock": 11528121
   },
   {
     "id": "standard",
     "name": "6-HOUR STANDARD",
     "icon": "local_fire_department",
-    "address": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "address": "0xCe7ad9152D4cCE5CCE40Bfc2221f45Ad277F71CC",
     "duration": 21600,
     "ticketPriceEth": "0.01",
-    "deploymentBlock": 4
+    "deploymentBlock": 11528122
   },
   {
     "id": "mega",
     "name": "1-WEEK MEGA",
     "icon": "diamond",
-    "address": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "address": "0x5bc57F9b989264444813560317bc27f4BCee9296",
     "duration": 604800,
     "ticketPriceEth": "0.01",
-    "deploymentBlock": 5
+    "deploymentBlock": 11528123
   }
 ];
 export const CONTRACT_ADDRESS = POOLS[2].address;
